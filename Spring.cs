@@ -1,6 +1,5 @@
 namespace Ostrovok;
 
-/// <summary>Простая пружина: даёт ту самую мягкую «капельную» анимацию острова.</summary>
 public class Spring
 {
     public double Value, Velocity, Target;
@@ -13,8 +12,8 @@ public class Spring
     public void Step(double dt)
     {
         dt = Math.Min(dt, 1.0 / 30);
-        // полу-неявный Эйлер, подшаги для устойчивости
-        int n = 4; double h = dt / n;
+    
+        int n = 8; double h = dt / n;
         for (int i = 0; i < n; i++)
         {
             double a = (-Stiffness * (Value - Target) - Damping * Velocity) / Mass;
