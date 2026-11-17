@@ -1,0 +1,34 @@
+<Window x:Class="Ostrovok.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Островок" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
+        SizeToContent="Manual" Width="220" Height="36"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display" FontFamily="Segoe UI Variable Text, Segoe UI">
+    <Border x:Name="Pill" Background="{DynamicResource Bg}" CornerRadius="18" ClipToBounds="True"
+            BorderBrush="#22FFFFFF" BorderThickness="1">
+        <Grid>
+            <!-- Свёрнутый вид -->
+            <Grid x:Name="Compact" Margin="10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <ContentControl x:Name="CompactChar" Grid.Column="0" Width="26" Height="26" VerticalAlignment="Center"/>
+                <TextBlock x:Name="CompactText" Grid.Column="1" Margin="8,0" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg}" FontSize="12.5" TextTrimming="CharacterEllipsis"
+                           HorizontalAlignment="Center"/>
+                <ContentControl x:Name="CompactRight" Grid.Column="2" VerticalAlignment="Center"/>
+            </Grid>
+            <!-- Развёрнутый вид -->
+            <DockPanel x:Name="Expanded" Margin="14,10,14,12" Opacity="0" IsHitTestVisible="False">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <ContentControl x:Name="ExpChar" DockPanel.Dock="Right" Width="34" Height="34"/>
+                    <StackPanel x:Name="TabBar" Orientation="Horizontal"/>
+                </DockPanel>
+                <Grid x:Name="Host"/>
+            </DockPanel>
+        </Grid>
+    </Border>
+</Window>
