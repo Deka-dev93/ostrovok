@@ -42,6 +42,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Theme.Apply();
         CompactChar.Content = _charC; ExpChar.Content = _charE;
+        Expanded.RenderTransformOrigin = new Point(0.5, 0); Expanded.RenderTransform = _expScale;
         _charC.Kind = _charE.Kind = Hub.S.Character;
         CompactRight.Content = _rightText;
 
@@ -120,6 +121,7 @@ public partial class MainWindow : Window
         if (_w.Settled && _h.Settled && _y.Settled && _r.Settled)
         {
             if (Expanded.CacheMode != null) Expanded.CacheMode = null;   // анимация закончилась — кэш не нужен, текст чёткий
+            if (!Pill.UseLayoutRounding) Pill.UseLayoutRounding = true;
             return;
         }
         // на время анимации прозрачность большого дерева считаем один раз в картинку, а не каждый кадр
@@ -127,13 +129,16 @@ public partial class MainWindow : Window
 
         _w.Step(dt); _h.Step(dt); _y.Step(dt); _r.Step(dt);
         double w = Math.Max(60, _w.Value), h = Math.Max(24, _h.Value);
+        Pill.UseLayoutRounding = false;            // субпиксельные края во время движения — без «ступенек»
         Pill.Width = w; Pill.Height = h;
         if (!_y.Settled) ApplyBounds();
         ApplyShape();
 
         double t = Math.Clamp((_w.Value - CompactW) / (ExpW - CompactW), 0, 1);
-        Expanded.Opacity = Math.Clamp((t - 0.45) / 0.55, 0, 1);
-        Compact.Opacity = Math.Clamp(1 - t * 2.4, 0, 1);
+        double eIn = Smooth((t - 0.30) / 0.70), cOut = 1 - Smooth(t / 0.35);
+        Expanded.Opacity = eIn;
+        _expScale.ScaleX = _expScale.ScaleY = 0.93 + 0.07 * eIn;
+        Compact.Opacity = cOut;
         Compact.IsHitTestVisible = t < 0.5;
         Expanded.IsHitTestVisible = t > 0.8;
     }
@@ -160,9 +165,12 @@ public partial class MainWindow : Window
         return (_centerX - _w.Target / 2 - m, top <= 4 ? -2000 : top - m, _centerX + _w.Target / 2 + m, top + _h.Target + m);
     }
 
+    static double Smooth(double x) { x = Math.Clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+    readonly ScaleTransform _expScale = new(1, 1);
+
     void ApplyShape()
     {
-        double r = Math.Max(10, _r.Value);
+        double r = Math.Clamp(Pill.Height / 2, 10, 28);
         Pill.CornerRadius = Hub.S.EdgeMode ? new CornerRadius(0, 0, r, r) : new CornerRadius(r);
     }
 
@@ -173,8 +181,9 @@ public partial class MainWindow : Window
         _open = open;
         if (open)
         {
-            _w.Target = ExpW; _h.Target = ExpH; _r.Target = 28;
-            _w.Stiffness = _h.Stiffness = 240; _w.Damping = _h.Damping = 17;   // мягкий «капельный» овершут
+            _w.Target = ExpW; _h.Target = ExpH;
+            _w.Stiffness = 190; _w.Damping = 24;      // ширина: быстрее
+            _h.Stiffness = 150; _h.Damping = 22;      // высота: чуть позже и мягче — остров «наливается»
             ShowTab(_tabIndex);
             _charE.ShowEmotion(Mood.Love, 1.2);
             Hub.Notices.MarkRead();
@@ -184,8 +193,9 @@ public partial class MainWindow : Window
         {
             _closedAt = DateTime.Now;
             var (w, h) = CompactSize();
-            _w.Target = w; _h.Target = h; _r.Target = h / 2;
-            _w.Stiffness = _h.Stiffness = 320; _w.Damping = _h.Damping = 24;
+            _w.Target = w; _h.Target = h;
+            _w.Stiffness = 210; _w.Damping = 29;
+            _h.Stiffness = 250; _h.Damping = 31;
         }
     }
 
@@ -269,7 +279,7 @@ public partial class MainWindow : Window
         _charC.Dancing = Hub.Media.IsPlaying;
         _charE.Dancing = Hub.Media.IsPlaying;
         _charC.Thinking = _charE.Thinking = ChatBusy;
-        if (!_open) { var (w2, h2) = CompactSize(); _w.Target = w2; _h.Target = h2; _r.Target = h2 / 2; }
+        if (!_open) { var (w2, h2) = CompactSize(); _w.Target = w2; _h.Target = h2; }
     }
 
     public static bool ChatBusy;
