@@ -23,7 +23,8 @@ public partial class MainWindow : Window
     readonly Dictionary<string, TabPage> _pages = new();
     readonly List<Button> _tabBtns = new();
     readonly DispatcherTimer _logic = new() { Interval = TimeSpan.FromMilliseconds(50) };
-    readonly DispatcherTimer _leave = new() { Interval = TimeSpan.FromMilliseconds(350) };
+    DateTime? _inSince, _outSince;
+    DateTime _closedAt = DateTime.MinValue;
 
     bool _open, _userHidden, _dragging, _busyFullscreen;
     int _tabIndex, _activityOffset;
@@ -46,9 +47,6 @@ public partial class MainWindow : Window
 
         BuildTabs();
         Loaded += OnLoaded;
-        MouseEnter += (_, _) => { _leave.Stop(); if (!Hub.S.OpenOnClick) SetOpen(true); };
-        MouseLeave += (_, _) => { if (!_dragging) _leave.Start(); };
-        _leave.Tick += (_, _) => { _leave.Stop(); if (!IsMouseOver && !_dragging) SetOpen(false); };
         MouseLeftButtonDown += OnDown;
         MouseMove += OnDragMove;
         MouseLeftButtonUp += OnUp;
@@ -73,7 +71,7 @@ public partial class MainWindow : Window
         _topBase = Hub.S.EdgeMode ? 0 : (Hub.S.Top ?? 8);
         _y.Value = -CompactH - 6; _y.Target = 0;
         ApplyShape();
-        Left = _centerX - CompactW / 2; Top = _topBase + _y.Value;
+        ApplyBounds();
 
         CompositionTarget.Rendering += OnFrame;
         _logic.Start();
@@ -97,6 +95,11 @@ public partial class MainWindow : Window
         it.Tick += async (_, _) => await Hub.Reminders.LoadIcsAsync();
         it.Start();
 
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+        {
+            for (int i = 0; i < _tabs.Count; i++) Page(i);
+        }));
+
         await Hub.Media.InitAsync();
         _ = Hub.Reminders.LoadIcsAsync();
         _ = Hub.Notices.InitSystemAsync();
@@ -114,12 +117,18 @@ public partial class MainWindow : Window
     void OnFrame(object s, EventArgs e)
     {
         var now = DateTime.Now; double dt = (now - _last).TotalSeconds; _last = now;
-        if (_w.Settled && _h.Settled && _y.Settled && _r.Settled) return;
+        if (_w.Settled && _h.Settled && _y.Settled && _r.Settled)
+        {
+            if (Expanded.CacheMode != null) Expanded.CacheMode = null;   // анимация закончилась — кэш не нужен, текст чёткий
+            return;
+        }
+        // на время анимации прозрачность большого дерева считаем один раз в картинку, а не каждый кадр
+        if (Expanded.CacheMode == null) Expanded.CacheMode = new BitmapCache(VisualTreeHelper.GetDpi(this).DpiScaleX);
 
         _w.Step(dt); _h.Step(dt); _y.Step(dt); _r.Step(dt);
         double w = Math.Max(60, _w.Value), h = Math.Max(24, _h.Value);
-        Width = w; Height = h;
-        Left = _centerX - w / 2; Top = _topBase + _y.Value;
+        Pill.Width = w; Pill.Height = h;
+        if (!_y.Settled) ApplyBounds();
         ApplyShape();
 
         double t = Math.Clamp((_w.Value - CompactW) / (ExpW - CompactW), 0, 1);
@@ -127,6 +136,28 @@ public partial class MainWindow : Window
         Compact.Opacity = Math.Clamp(1 - t * 2.4, 0, 1);
         Compact.IsHitTestVisible = t < 0.5;
         Expanded.IsHitTestVisible = t > 0.8;
+    }
+
+    // Окно ФИКСИРОВАННОГО размера (с запасом под раскрытый остров): меняется только размер пилюли внутри него.
+    // Изменение размера окна с прозрачностью каждый кадр заставляет Windows пересоздавать поверхность — отсюда рывки.
+    const double WinW = 640, WinH = 360;
+
+    /// <summary>Двигает окно (не меняя размер) в целых физических пикселях — без дрожания при дробном масштабе.</summary>
+    void ApplyBounds(double _w_unused = 0, double _h_unused = 0)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        double k = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        int px = (int)Math.Round((_centerX - WinW / 2) * k), py = (int)Math.Round((_topBase + _y.Value) * k);
+        Native.SetWindowPos(hwnd, IntPtr.Zero, px, py, 0, 0, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | 0x1 /*SWP_NOSIZE*/);
+    }
+
+    /// <summary>Зона наведения в DIP: считается по ЦЕЛЕВОМУ размеру и с запасом по краям — не зависит от анимации окна.</summary>
+    (double l, double t, double r, double b) HotZone()
+    {
+        double m = _open ? 18 : 6;
+        double top = _topBase + _y.Value;
+        return (_centerX - _w.Target / 2 - m, top <= 4 ? -2000 : top - m, _centerX + _w.Target / 2 + m, top + _h.Target + m);
     }
 
     void ApplyShape()
@@ -151,6 +182,7 @@ public partial class MainWindow : Window
         }
         else
         {
+            _closedAt = DateTime.Now;
             var (w, h) = CompactSize();
             _w.Target = w; _h.Target = h; _r.Target = h / 2;
             _w.Stiffness = _h.Stiffness = 320; _w.Damping = _h.Damping = 24;
@@ -258,12 +290,13 @@ public partial class MainWindow : Window
     {
         _tick++;
         if (!_open && CompactRight.Content == _eq) _eq.InvalidateVisual();
-        // персонаж следит за курсором
+        // курсор в физических пикселях → DIP
         Native.GetCursorPos(out var p);
-        var src = PresentationSource.FromVisual(this);
-        double sx = src?.CompositionTarget.TransformFromDevice.M11 ?? 1;
-        double dx = p.X * sx - (Left + 30), dy = p.Y * sx - (Top + 20);
-        double len = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+        double inv = 1.0 / VisualTreeHelper.GetDpi(this).DpiScaleX;
+        double cx = p.X * inv, cy = p.Y * inv;
+
+        // персонаж следит за курсором
+        double dx = cx - (_centerX - _w.Value / 2 + 30), dy = cy - (_topBase + 20);
         foreach (var c in new[] { _charC, _charE })
         {
             c.LookX = Math.Clamp(dx / 200, -1, 1); c.LookY = Math.Clamp(dy / 200, -1, 1);
@@ -271,14 +304,21 @@ public partial class MainWindow : Window
         }
         if (Math.Abs(dx) + Math.Abs(dy) > 3) _lastMove = DateTime.Now;
 
-        // открытие по наведению даже если окно уже сжалось (мышь вне окна, но над зоной)
-        if (!Hub.S.OpenOnClick && !_open && !_userHidden && !_busyFullscreen)
+        // наведение: гистерезис по времени и по зоне — окно не «дребезжит», даже если курсор на границе
+        var z = HotZone();
+        bool inside = cx >= z.l && cx <= z.r && cy >= z.t && cy <= z.b;
+        var now = DateTime.Now;
+        if (inside) { _outSince = null; _inSince ??= now; }
+        else { _inSince = null; _outSince ??= now; }
+
+        if (!Hub.S.OpenOnClick && !_dragging && !_userHidden && !_busyFullscreen)
         {
-            if (p.X * sx >= Left && p.X * sx <= Left + Width && p.Y * sx >= Top - 2 && p.Y * sx <= Top + Height + 2 && IsMouseOver) SetOpen(true);
+            if (!_open && inside && (now - _inSince.Value).TotalMilliseconds > 90 && (now - _closedAt).TotalMilliseconds > 350) SetOpen(true);
+            else if (_open && !inside && (now - _outSince.Value).TotalMilliseconds > 300) SetOpen(false);
         }
 
-        // клик мимо открытого острова закрывает его (режим наведения)
-        if (_open && !IsMouseOver && !_dragging && (Native.GetAsyncKeyState(0x01) & 0x8000) != 0) SetOpen(false);
+        // клик мимо открытого острова закрывает его
+        if (_open && !inside && !_dragging && (Native.GetAsyncKeyState(0x01) & 0x8000) != 0) SetOpen(false);
 
         // реже: данные
         if (_tick % 5 == 0)
@@ -298,7 +338,7 @@ public partial class MainWindow : Window
     void UpdateY()
     {
         bool hide = _userHidden || _busyFullscreen;
-        _y.Target = hide ? -(Height + 12) : 0;
+        _y.Target = hide ? -(_h.Value + 12) : 0;
         if (hide) SetOpen(false);
     }
 
@@ -316,7 +356,7 @@ public partial class MainWindow : Window
     {
         if (e.OriginalSource is DependencyObject d && HasInteractiveParent(d)) return;
         if (Hub.S.OpenOnClick && !_open) { SetOpen(true); return; }
-        _dragging = true; _dragStart = PointToScreen(e.GetPosition(this)); _dragCx = _centerX; _dragTop = _topBase;
+        _dragging = true; _dragStart = CursorDip(); _dragCx = _centerX; _dragTop = _topBase;
         CaptureMouse();
     }
 
@@ -331,29 +371,31 @@ public partial class MainWindow : Window
         return false;
     }
 
+    Point CursorDip()
+    {
+        Native.GetCursorPos(out var c);
+        double inv = 1.0 / VisualTreeHelper.GetDpi(this).DpiScaleX;
+        return new Point(c.X * inv, c.Y * inv);
+    }
+
     void OnDragMove(object s, MouseEventArgs e)
     {
         if (!_dragging) return;
-        var p = PointToScreen(e.GetPosition(this));
-        var src = PresentationSource.FromVisual(this);
-        double k = src?.CompositionTarget.TransformFromDevice.M11 ?? 1;
-        _centerX = _dragCx + (p.X - _dragStart.X) * k;
-        _topBase = Math.Max(-8, _dragTop + (p.Y - _dragStart.Y) * k);
+        var p = CursorDip();
+        _centerX = _dragCx + (p.X - _dragStart.X);
+        _topBase = Math.Max(-8, _dragTop + (p.Y - _dragStart.Y));
         if (Hub.S.EdgeMode) _topBase = 0;
-        Left = _centerX - Width / 2; Top = _topBase + _y.Value;
+        ApplyBounds();
     }
 
     void OnUp(object s, MouseButtonEventArgs e)
     {
         if (!_dragging) return;
         _dragging = false; ReleaseMouseCapture();
-        var p = PointToScreen(e.GetPosition(this));
-        var src = PresentationSource.FromVisual(this);
-        double k = src?.CompositionTarget.TransformFromDevice.M11 ?? 1;
+        var p = CursorDip();
         // смахнули вверх — спрятать
-        if ((_dragStart.Y - p.Y) * k > 40 && !Hub.S.EdgeMode) { _topBase = Hub.S.Top ?? 8; _centerX = _dragCx; ToggleHidden(); return; }
+        if ((_dragStart.Y - p.Y) > 40 && !Hub.S.EdgeMode) { _topBase = Hub.S.Top ?? 8; _centerX = _dragCx; ToggleHidden(); return; }
         Hub.S.Left = _centerX; if (!Hub.S.EdgeMode) Hub.S.Top = _topBase; Hub.S.Save();
-        if (!IsMouseOver) _leave.Start();
     }
 
     // ───────── правое меню ─────────
@@ -379,7 +421,7 @@ public partial class MainWindow : Window
     public void ApplyEdgeMode()
     {
         _topBase = Hub.S.EdgeMode ? 0 : (Hub.S.Top ?? 8);
-        ApplyShape(); Top = _topBase + _y.Value;
+        ApplyShape(); ApplyBounds();
     }
 
     // ───────── вкладки ─────────
