@@ -324,7 +324,7 @@ public partial class MainWindow : Window
     {
         while (d != null)
         {
-            if (d is Button or TextBox or Slider or ScrollBar or ComboBox or CheckBox or System.Windows.Controls.Primitives.ToggleButton
+            if (d is Button or TextBox or Slider or System.Windows.Controls.Primitives.ScrollBar or ComboBox or CheckBox or System.Windows.Controls.Primitives.ToggleButton
                 or Microsoft.Web.WebView2.Wpf.WebView2) return true;
             d = d is System.Windows.Media.Visual || d is System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
         }
