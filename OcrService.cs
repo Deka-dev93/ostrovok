@@ -17,7 +17,7 @@ public static class OcrService
         try
         {
             var enc = new PngBitmapEncoder();
-            enc.Frames.Add(BitmapFrame.Create(img));
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(img));
             using var ms = new MemoryStream();
             enc.Save(ms);
 
