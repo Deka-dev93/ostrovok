@@ -16,10 +16,10 @@ jobs:
           name: Ostrovok-win-x64
           path: publish
       - name: Архив для релиза
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release]')
         run: Compress-Archive -Path publish\* -DestinationPath Ostrovok-win-x64.zip
       - name: Релиз на GitHub
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release]')
         env:
           GH_TOKEN: ${{ github.token }}
           NOTES: |
@@ -28,4 +28,7 @@ jobs:
             Если Windows покажет окно SmartScreen, нажмите «Подробнее» → «Выполнить в любом случае»: программа не подписана платным сертификатом.
 
             Что внутри: музыка со словами песен, погода, таймеры, скриншоты с распознаванием и переводом, чат с ИИ, буфер обмена, заметки, календарь с вашим Google Календарём, почта, Telegram, наушники с зарядом, 7 персонажей, тёмная, светлая и стеклянная темы, настройка вкладок.
-        run: gh release create "${{ github.ref_name }}" Ostrovok-win-x64.zip --title "Островок ${{ github.ref_name }}" --notes "$env:NOTES"
+        run: |
+          if ("${{ github.ref }}".StartsWith("refs/tags/")) { $tag = "${{ github.ref_name }}" }
+          else { $v = ([xml](Get-Content Ostrovok.csproj)).Project.PropertyGroup.Version | Where-Object { $_ }; $tag = "v$v" }
+          gh release create $tag Ostrovok-win-x64.zip --target "${{ github.sha }}" --title "Островок $tag" --notes "$env:NOTES"
