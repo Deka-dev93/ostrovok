@@ -30,11 +30,11 @@ public class CalendarTab : TabPage
         _in.KeyDown += (_, e) =>
         {
             if (e.Key != Key.Enter) return;
-            if (Hub.Reminders.Add(_in.Text)) { _in.Clear(); _status.Text = "Напоминание добавлено ✓"; }
-            else _status.Text = "Не понял время. Примеры: 18:30 · завтра 9:00 · через 20 мин";
+            if (Hub.Reminders.Add(_in.Text)) { _in.Clear(); Say("Напоминание добавлено ✓"); }
+            else Say("Не понял время. Примеры: 18:30 · завтра 9:00 · через 20 мин");
         };
         SetRow(_in, 0); Children.Add(_in);
-        _status.Margin = new Thickness(2, 3, 0, 4); SetRow(_status, 1); Children.Add(_status);
+        _status.Margin = new Thickness(2, 3, 0, 4); _status.Visibility = Visibility.Collapsed; SetRow(_status, 1); Children.Add(_status);
 
         var body = new Grid();
         body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(246) });
@@ -42,14 +42,17 @@ public class CalendarTab : TabPage
         _side.Margin = new Thickness(10, 0, 0, 0);
         SetColumn(_side, 1);
         body.Children.Add(_gridHost); body.Children.Add(_side);
-        SetRow(body, 2); Children.Add(body);
+        var bodyScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = body };
+        SetRow(bodyScroll, 2); Children.Add(bodyScroll);
 
         Hub.Reminders.Changed += () => Dispatcher.BeginInvoke(Rebuild);
     }
 
+    void Say(string s) { _status.Text = s; _status.Visibility = s.Length == 0 ? Visibility.Collapsed : Visibility.Visible; }
+
     public override void OnShown()
     {
-        _status.Text = "";
+        Say("");
         _setup = string.IsNullOrWhiteSpace(Hub.S.IcsUrl);
         Rebuild();
     }
@@ -102,7 +105,7 @@ public class CalendarTab : TabPage
         }
         p.Children.Add(wk);
 
-        var grid = new UniformGrid { Columns = 7 };
+        var grid = new UniformGrid { Columns = 7, Rows = 6 };
         var first = _month;
         var start = first.AddDays(-(((int)first.DayOfWeek + 6) % 7));
         for (int i = 0; i < 42; i++)
@@ -112,16 +115,13 @@ public class CalendarTab : TabPage
         }
         p.Children.Add(grid);
 
-        var legend = UI.Text("○ в кружке — дни, где есть события", 10, false, true);
-        legend.Margin = new Thickness(0, 4, 0, 0); legend.HorizontalAlignment = HorizontalAlignment.Center;
-        p.Children.Add(legend);
         _gridHost.Child = p;
     }
 
     UIElement Cell(DateTime day, bool inMonth, bool hasEvents)
     {
         bool today = day.Date == DateTime.Today, sel = day.Date == _sel.Date;
-        var ring = new Border { Width = 28, Height = 28, CornerRadius = new CornerRadius(14), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        var ring = new Border { Width = 26, Height = 26, CornerRadius = new CornerRadius(13), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                                 BorderThickness = new Thickness(hasEvents ? 2 : 0) };
         if (hasEvents) ring.SetResourceReference(Border.BorderBrushProperty, "Accent");
         if (today) ring.SetResourceReference(Border.BackgroundProperty, "Accent");
@@ -131,7 +131,7 @@ public class CalendarTab : TabPage
         if (today) t.Foreground = Brushes.White;
         ring.Child = t;
         // выбранный день: дополнительное внешнее кольцо
-        var outer = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(sel ? 1.2 : 0),
+        var outer = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(15), BorderThickness = new Thickness(sel ? 1.2 : 0),
                                  HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Child = ring };
         if (sel) outer.SetResourceReference(Border.BorderBrushProperty, "Fg");
         var d = day;

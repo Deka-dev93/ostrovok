@@ -131,19 +131,24 @@ public class MusicTab : TabPage
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var left = new StackPanel { Margin = new Thickness(0, 0, 12, 0) };
-        var cb = new Border { Height = 150, CornerRadius = new CornerRadius(14), ClipToBounds = true, Child = _cover };
+        var cb = new Border { Width = 84, Height = 84, CornerRadius = new CornerRadius(14), ClipToBounds = true, Child = _cover, Margin = new Thickness(0, 0, 10, 0) };
         cb.SetResourceReference(Border.BackgroundProperty, "Card");
-        left.Children.Add(cb); left.Children.Add(_title); left.Children.Add(_artist); left.Children.Add(_player);
+        _title.FontSize = 14; _title.TextWrapping = TextWrapping.Wrap; _title.TextTrimming = TextTrimming.None; _title.MaxHeight = 38;
+        var meta = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        meta.Children.Add(_title); meta.Children.Add(_artist); meta.Children.Add(_player);
+        var head = new DockPanel(); DockPanel.SetDock(cb, Dock.Left); head.Children.Add(cb); head.Children.Add(meta);
+        left.Children.Add(head);
         left.Children.Add(_seek);
         var times = new DockPanel(); DockPanel.SetDock(_dur, Dock.Right); times.Children.Add(_dur); times.Children.Add(_pos);
         left.Children.Add(times);
         _play = new RoundButton(Glyphs.Play, 46, 20, true, Hub.Media.PlayPause);
-        var c = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
+        var c = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 4) };
         c.Children.Add(new RoundButton(Glyphs.Prev, 36, 16, false, Hub.Media.Prev)); c.Children.Add(_play); c.Children.Add(new RoundButton(Glyphs.Next, 36, 16, false, Hub.Media.Next));
         _fav = new RoundButton(Glyphs.Heart, 30, 14, false, ToggleFav);
         c.Children.Add(_fav);
         left.Children.Add(c);
-        SetColumn(left, 0); Children.Add(left);
+        var leftScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = left };
+        SetColumn(leftScroll, 0); Children.Add(leftScroll);
 
         _scroll.Content = _lyrics; SetColumn(_scroll, 1); Children.Add(_scroll);
 
