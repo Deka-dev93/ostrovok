@@ -15,6 +15,14 @@ public class AppSettings
     public string Accent { get; set; } = "#7C5CFF";
     public bool DarkTheme { get; set; } = true;
     public bool Glass { get; set; } = false;
+    public List<string> HiddenTabs { get; set; } = new();
+    public List<string> TabOrder { get; set; } = new();
+    public bool ShowWeatherInPill { get; set; } = true;
+    public bool ShowCharacter { get; set; } = true;
+    public bool PopMail { get; set; } = true;
+    public bool PopTelegram { get; set; } = true;
+    public bool PopHeadphones { get; set; } = true;
+    public bool PopSystem { get; set; } = true;
     public bool OpenOnClick { get; set; } = false;
     public bool EdgeMode { get; set; } = false;
     public bool ShowLyricsInPill { get; set; } = true;

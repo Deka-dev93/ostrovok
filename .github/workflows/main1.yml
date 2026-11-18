@@ -1,5 +1,7 @@
 name: build
 on: [push, workflow_dispatch]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -13,3 +15,17 @@ jobs:
         with:
           name: Ostrovok-win-x64
           path: publish
+      - name: Архив для релиза
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: Compress-Archive -Path publish\* -DestinationPath Ostrovok-win-x64.zip
+      - name: Релиз на GitHub
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: |
+            Скачайте Ostrovok-win-x64.zip, распакуйте в любую папку и запустите Ostrovok.exe. Устанавливать ничего не нужно, .NET уже внутри.
+
+            Если Windows покажет окно SmartScreen, нажмите «Подробнее» → «Выполнить в любом случае»: программа не подписана платным сертификатом.
+
+            Что внутри: музыка со словами песен, погода, таймеры, скриншоты с распознаванием и переводом, чат с ИИ, буфер обмена, заметки, календарь с вашим Google Календарём, почта, Telegram, наушники с зарядом, 7 персонажей, тёмная, светлая и стеклянная темы, настройка вкладок.
+        run: gh release create "${{ github.ref_name }}" Ostrovok-win-x64.zip --title "Островок ${{ github.ref_name }}" --notes "$env:NOTES"

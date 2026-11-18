@@ -43,7 +43,7 @@ public partial class MainWindow : Window
         Theme.Apply();
         CompactChar.Content = _charC; ExpChar.Content = _charE;
         Expanded.RenderTransformOrigin = new Point(0.5, 0); Expanded.RenderTransform = _expScale;
-        _charC.Kind = _charE.Kind = Hub.S.Character;
+        ApplyCharacter();
         CompactRight.Content = _rightText;
 
         BuildTabs();
@@ -244,8 +244,17 @@ public partial class MainWindow : Window
         RefreshCompact();
     }
 
+    static bool AllowPop(IslandNotice n) => n.App switch
+    {
+        "Почта" => Hub.S.PopMail,
+        "Telegram" => Hub.S.PopTelegram,
+        "Наушники" => Hub.S.PopHeadphones,
+        _ => Hub.S.PopSystem
+    };
+
     void ShowNotice(IslandNotice n)
     {
+        if (!AllowPop(n)) return;
         _notice = n; _noticeUntil = DateTime.Now.AddSeconds(5); _activityOffset = 0;
         _charC.ShowEmotion(Mood.Surprised, 1.2);
         RefreshCompact();
@@ -279,7 +288,7 @@ public partial class MainWindow : Window
                 var w = Hub.Weather.Last;
                 CompactText.Text = DateTime.Now.ToString("HH:mm");
                 CompactRight.Content = _rightText;
-                _rightText.Text = w == null ? "" : $"{w.Icon} {Math.Round(w.Temp)}°";
+                _rightText.Text = w == null || !Hub.S.ShowWeatherInPill ? "" : $"{w.Icon} {Math.Round(w.Temp)}°";
                 break;
         }
         _rightText.Foreground = (Brush)Application.Current.Resources["Fg"];
@@ -435,7 +444,7 @@ public partial class MainWindow : Window
         Add("Вернуть на место (вверх по центру)", () => { _centerX = SystemParameters.PrimaryScreenWidth / 2; _topBase = Hub.S.EdgeMode ? 0 : 8; Hub.S.Left = _centerX; Hub.S.Top = _topBase; Hub.S.Save(); ApplyBounds(); });
         Add(Hub.S.DarkTheme ? "Светлая тема" : "Тёмная тема", ToggleTheme);
         Add(Hub.S.Glass ? "Обычный вид (без стекла)" : "Стеклянный вид", ToggleGlass);
-        Add("Настройки", () => OpenIsland(_tabs.Count - 1));
+        Add("Настройки", () => OpenIsland(_tabs.FindIndex(t => t.name == "Настройки")));
         m.Items.Add(new Separator());
         Add("Выход", () => { Hub.S.Save(); Application.Current.Shutdown(); });
         m.IsOpen = true;
@@ -453,7 +462,12 @@ public partial class MainWindow : Window
         if (_open) ShowTab(_tabIndex);
     }
 
-    public void ApplyCharacter() { _charC.Kind = _charE.Kind = Hub.S.Character; }
+    public void ApplyCharacter()
+    {
+        _charC.Kind = _charE.Kind = Hub.S.Character;
+        CompactChar.Visibility = Hub.S.ShowCharacter ? Visibility.Visible : Visibility.Collapsed;
+        ExpChar.Visibility = Hub.S.ShowCharacter ? Visibility.Visible : Visibility.Collapsed;
+    }
     public void ApplyEdgeMode()
     {
         _topBase = Hub.S.EdgeMode ? 0 : (Hub.S.Top ?? 8);
@@ -461,21 +475,48 @@ public partial class MainWindow : Window
     }
 
     // ───────── вкладки ─────────
+    readonly List<(string icon, string name, Func<TabPage> make)> _all = new();
+    static readonly string[] Pinned = { "Вкладки", "Настройки" };
+
     void BuildTabs()
     {
-        _tabs.Add(("🏠", "Главная", () => new HomeTab(this)));
-        _tabs.Add(("🎵", "Музыка", () => new MusicTab()));
-        _tabs.Add(("☀️", "Погода", () => new WeatherTab()));
-        _tabs.Add(("💬", "Чат", () => new ChatTab()));
-        _tabs.Add(("📧", "Почта", () => new MailTab()));
-        _tabs.Add(("✈️", "Telegram", () => new TelegramTab()));
-        _tabs.Add(("⏱", "Таймер", () => new TimerTab()));
-        _tabs.Add(("📋", "Буфер", () => new ClipboardTab()));
-        _tabs.Add(("📝", "Заметки", () => new NotesTab()));
-        _tabs.Add(("📅", "Календарь", () => new CalendarTab()));
-        _tabs.Add(("🖥", "Система", () => new SystemTab()));
-        _tabs.Add(("⚙️", "Настройки", () => new SettingsTab(this)));
+        _all.Add(("🏠", "Главная", () => new HomeTab(this)));
+        _all.Add(("🎵", "Музыка", () => new MusicTab()));
+        _all.Add(("☀️", "Погода", () => new WeatherTab()));
+        _all.Add(("💬", "Чат", () => new ChatTab()));
+        _all.Add(("📧", "Почта", () => new MailTab()));
+        _all.Add(("✈️", "Telegram", () => new TelegramTab()));
+        _all.Add(("⏱", "Таймер", () => new TimerTab()));
+        _all.Add(("📋", "Буфер", () => new ClipboardTab()));
+        _all.Add(("📝", "Заметки", () => new NotesTab()));
+        _all.Add(("📅", "Календарь", () => new CalendarTab()));
+        _all.Add(("🖥", "Система", () => new SystemTab()));
+        _all.Add(("🧩", "Вкладки", () => new CustomizeTab(this)));
+        _all.Add(("⚙️", "Настройки", () => new SettingsTab(this)));
+        ApplyTabs();
+    }
 
+    /// <summary>Все вкладки в выбранном пользователем порядке; «Вкладки» и «Настройки» всегда в конце.</summary>
+    public List<(string icon, string name)> TabInfos()
+    {
+        var movable = _all.Where(t => !Pinned.Contains(t.name)).ToList();
+        var order = Hub.S.TabOrder;
+        var sorted = movable.OrderBy(t => { int i = order.IndexOf(t.name); return i < 0 ? 1000 + movable.IndexOf(t) : i; }).ToList();
+        foreach (var p in Pinned) sorted.Add(_all.First(t => t.name == p));
+        return sorted.Select(t => (t.icon, t.name)).ToList();
+    }
+
+    public static bool IsPinnedTab(string name) => Pinned.Contains(name);
+
+    public void ApplyTabs()
+    {
+        string cur = _tabIndex >= 0 && _tabIndex < _tabs.Count ? _tabs[_tabIndex].name : null;
+        _tabs.Clear(); _tabBtns.Clear(); TabBar.Children.Clear();
+        foreach (var info in TabInfos())
+        {
+            if (Hub.S.HiddenTabs.Contains(info.name) && !Pinned.Contains(info.name)) continue;
+            _tabs.Add(_all.First(t => t.name == info.name));
+        }
         for (int i = 0; i < _tabs.Count; i++)
         {
             int idx = i;
@@ -484,6 +525,10 @@ public partial class MainWindow : Window
             b.Click += (_, _) => ShowTab(idx);
             TabBar.Children.Add(b); _tabBtns.Add(b);
         }
+        int keep = cur == null ? 0 : _tabs.FindIndex(t => t.name == cur);
+        _tabIndex = keep < 0 ? 0 : keep;
+        if (_open) ShowTab(_tabIndex);
+        UpdateBadges();
     }
 
     void UpdateBadges()
