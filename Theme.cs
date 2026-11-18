@@ -25,6 +25,14 @@ public static class Theme
 {
     static SolidColorBrush B(string hex) { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)); b.Freeze(); return b; }
 
+    static Brush Grad(double x1, double y1, double x2, double y2, params (string hex, double at)[] stops)
+    {
+        var b = new LinearGradientBrush { StartPoint = new Point(x1, y1), EndPoint = new Point(x2, y2) };
+        foreach (var (h, o) in stops) b.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString(h), o));
+        b.Freeze();
+        return b;
+    }
+
     public static Color AccentColor
     {
         get { try { return (Color)ColorConverter.ConvertFromString(Hub.S.Accent); } catch { return Color.FromRgb(124, 92, 255); } }
@@ -36,11 +44,27 @@ public static class Theme
     {
         var r = Application.Current.Resources;
         bool dark = Hub.S.DarkTheme;
-        r["Bg"] = B(dark ? "#F2101013" : "#F5F3F4F8");
+        bool glass = Hub.S.Glass;
         r["Fg"] = B(dark ? "#FFFFFFFF" : "#FF14141A");
-        r["FgDim"] = B(dark ? "#A0FFFFFF" : "#8C14141A");
-        r["Card"] = B(dark ? "#1FFFFFFF" : "#14000000");
-        r["CardHover"] = B(dark ? "#38FFFFFF" : "#26000000");
+        r["FgInv"] = B(dark ? "#FF101013" : "#FFFFFFFF");
+        r["FgDim"] = B(dark ? "#B0FFFFFF" : "#8C14141A");
+        if (glass)
+        {
+            // «стекло»: полупрозрачная заливка с лёгким градиентом, яркая кромка и блик сверху — и в тёмном, и в светлом варианте
+            r["Bg"] = dark ? Grad(0, 0, 0.35, 1, ("#CC2C2C3A", 0), ("#B8131319", 1)) : Grad(0, 0, 0.35, 1, ("#DCFFFFFF", 0), ("#BDE6EAF5", 1));
+            r["Edge"] = Grad(0, 0, 1, 1, (dark ? "#8CFFFFFF" : "#FFFFFFFF", 0), ("#16FFFFFF", 0.4), ("#0AFFFFFF", 0.62), (dark ? "#59FFFFFF" : "#B3FFFFFF", 1));
+            r["Sheen"] = Grad(0, 0, 0, 1, (dark ? "#38FFFFFF" : "#80FFFFFF", 0), ("#0CFFFFFF", 0.45), ("#00FFFFFF", 1));
+            r["Card"] = B(dark ? "#2BFFFFFF" : "#16000000");
+            r["CardHover"] = B(dark ? "#47FFFFFF" : "#28000000");
+        }
+        else
+        {
+            r["Bg"] = B(dark ? "#F2101013" : "#F5F3F4F8");
+            r["Edge"] = B("#22FFFFFF");
+            r["Sheen"] = Brushes.Transparent;
+            r["Card"] = B(dark ? "#1FFFFFFF" : "#14000000");
+            r["CardHover"] = B(dark ? "#38FFFFFF" : "#26000000");
+        }
         var a = new SolidColorBrush(AccentColor); a.Freeze();
         r["Accent"] = a;
     }

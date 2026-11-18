@@ -178,6 +178,7 @@ public partial class MainWindow : Window
     {
         double r = Math.Clamp(Pill.Height / 2, 10, 28);
         Pill.CornerRadius = Hub.S.EdgeMode ? new CornerRadius(0, 0, r, r) : new CornerRadius(r);
+        Sheen.CornerRadius = Pill.CornerRadius;
     }
 
     void SetOpen(bool open)
@@ -380,7 +381,7 @@ public partial class MainWindow : Window
     {
         while (d != null)
         {
-            if (d is Button or TextBox or Slider or System.Windows.Controls.Primitives.ScrollBar or ComboBox or CheckBox or System.Windows.Controls.Primitives.ToggleButton
+            if (d is Button or TextBox or Slider or SeekBar or System.Windows.Controls.Primitives.ScrollBar or ComboBox or CheckBox or System.Windows.Controls.Primitives.ToggleButton
                 or Microsoft.Web.WebView2.Wpf.WebView2) return true;
             d = d is System.Windows.Media.Visual || d is System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
         }
@@ -433,10 +434,17 @@ public partial class MainWindow : Window
         Add("Спрятать (вернуть — Ctrl+Alt+I)", ToggleHidden);
         Add("Вернуть на место (вверх по центру)", () => { _centerX = SystemParameters.PrimaryScreenWidth / 2; _topBase = Hub.S.EdgeMode ? 0 : 8; Hub.S.Left = _centerX; Hub.S.Top = _topBase; Hub.S.Save(); ApplyBounds(); });
         Add(Hub.S.DarkTheme ? "Светлая тема" : "Тёмная тема", ToggleTheme);
+        Add(Hub.S.Glass ? "Обычный вид (без стекла)" : "Стеклянный вид", ToggleGlass);
         Add("Настройки", () => OpenIsland(_tabs.Count - 1));
         m.Items.Add(new Separator());
         Add("Выход", () => { Hub.S.Save(); Application.Current.Shutdown(); });
         m.IsOpen = true;
+    }
+
+    public void ToggleGlass()
+    {
+        Hub.S.Glass = !Hub.S.Glass; Hub.S.Save(); Theme.Apply(); RefreshCompact();
+        if (_open) ShowTab(_tabIndex);
     }
 
     public void ToggleTheme()

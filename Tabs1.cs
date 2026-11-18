@@ -13,7 +13,7 @@ public class HomeTab : TabPage
     readonly TextBlock _weather = UI.Text("", 13), _time = UI.Text("", 22, true), _date = UI.Text("", 11.5, false, true);
     readonly Image _cover = new() { Width = 44, Height = 44, Stretch = Stretch.UniformToFill };
     readonly StackPanel _notices = new();
-    readonly Button _play;
+    readonly RoundButton _play;
 
     public HomeTab(MainWindow win)
     {
@@ -42,8 +42,8 @@ public class HomeTab : TabPage
         coverBorder.SetResourceReference(Border.BackgroundProperty, "Card");
         DockPanel.SetDock(coverBorder, Dock.Left);
         var ctr = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-        _play = UI.Btn("▶", Hub.Media.PlayPause, true);
-        ctr.Children.Add(UI.Btn("⏮", Hub.Media.Prev)); ctr.Children.Add(_play); ctr.Children.Add(UI.Btn("⏭", Hub.Media.Next));
+        _play = new RoundButton(Glyphs.Play, 36, 16, true, Hub.Media.PlayPause);
+        ctr.Children.Add(new RoundButton(Glyphs.Prev, 30, 14, false, Hub.Media.Prev)); ctr.Children.Add(_play); ctr.Children.Add(new RoundButton(Glyphs.Next, 30, 14, false, Hub.Media.Next));
         var meta = new StackPanel(); meta.Children.Add(_song); meta.Children.Add(_artist);
         var top = new DockPanel(); DockPanel.SetDock(coverBorder, Dock.Left); top.Children.Add(coverBorder); top.Children.Add(meta);
         left.Children.Add(top); left.Children.Add(ctr);
@@ -89,7 +89,7 @@ public class HomeTab : TabPage
         _song.Text = m.HasSession ? m.Title : "Ничего не играет";
         _artist.Text = m.HasSession ? m.Artist : "Запустите музыку в любом плеере";
         _cover.Source = m.Cover;
-        _play.Content = m.IsPlaying ? "⏸" : "▶";
+        _play.SetPlaying(m.IsPlaying);
         _time.Text = DateTime.Now.ToString("HH:mm");
         _date.Text = DateTime.Now.ToString("dddd, d MMMM", new System.Globalization.CultureInfo("ru-RU"));
         var w = Hub.Weather.Last;
@@ -115,12 +115,15 @@ public class MusicTab : TabPage
 {
     readonly TextBlock _title = UI.Text("", 16, true), _artist = UI.Text("", 12.5, false, true), _player = UI.Text("", 11, false, true);
     readonly Image _cover = new() { Stretch = Stretch.UniformToFill };
-    readonly Slider _seek = new() { Minimum = 0, Maximum = 1, Margin = new Thickness(0, 6, 0, 0) };
+    readonly SeekBar _seek = new();
     readonly TextBlock _pos = UI.Text("0:00", 11, false, true), _dur = UI.Text("0:00", 11, false, true);
     readonly StackPanel _lyrics = new();
     readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Hidden };
-    readonly Button _play;
-    bool _seeking; int _lastIdx = -2; string _lyricsKey = "";
+    readonly RoundButton _play;
+    RoundButton _fav;
+    static readonly Brush Pink = MakePink();
+    static Brush MakePink() { var b = new SolidColorBrush(Color.FromRgb(255, 77, 109)); b.Freeze(); return b; }
+    int _lastIdx = -2; string _lyricsKey = "";
 
     public MusicTab()
     {
@@ -134,21 +137,19 @@ public class MusicTab : TabPage
         left.Children.Add(_seek);
         var times = new DockPanel(); DockPanel.SetDock(_dur, Dock.Right); times.Children.Add(_dur); times.Children.Add(_pos);
         left.Children.Add(times);
-        _play = UI.Btn("▶", Hub.Media.PlayPause, true);
-        var c = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-        c.Children.Add(UI.Btn("⏮", Hub.Media.Prev)); c.Children.Add(_play); c.Children.Add(UI.Btn("⏭", Hub.Media.Next));
-        c.Children.Add(UI.Btn("♥", () => ToggleFav()));
+        _play = new RoundButton(Glyphs.Play, 46, 20, true, Hub.Media.PlayPause);
+        var c = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
+        c.Children.Add(new RoundButton(Glyphs.Prev, 36, 16, false, Hub.Media.Prev)); c.Children.Add(_play); c.Children.Add(new RoundButton(Glyphs.Next, 36, 16, false, Hub.Media.Next));
+        _fav = new RoundButton(Glyphs.Heart, 30, 14, false, ToggleFav);
+        c.Children.Add(_fav);
         left.Children.Add(c);
         SetColumn(left, 0); Children.Add(left);
 
         _scroll.Content = _lyrics; SetColumn(_scroll, 1); Children.Add(_scroll);
 
-        _seek.PreviewMouseLeftButtonDown += (_, _) => _seeking = true;
-        _seek.PreviewMouseLeftButtonUp += (_, _) =>
-        {
-            _seeking = false;
-            Hub.Media.Seek(TimeSpan.FromSeconds(_seek.Value * Hub.Media.Duration.TotalSeconds));
-        };
+        _seek.Format = f => TimerService.Fmt(TimeSpan.FromSeconds(f * Hub.Media.Duration.TotalSeconds));
+        _seek.Previewing += f => _pos.Text = TimerService.Fmt(TimeSpan.FromSeconds(f * Hub.Media.Duration.TotalSeconds));
+        _seek.Committed += f => Hub.Media.SeekTo(TimeSpan.FromSeconds(f * Hub.Media.Duration.TotalSeconds));
     }
 
     static string Key => Hub.Media.Artist + " — " + Hub.Media.Title;
@@ -168,10 +169,15 @@ public class MusicTab : TabPage
         _title.Text = m.HasSession ? m.Title : "Ничего не играет";
         _artist.Text = m.Artist; _player.Text = m.Player.Replace(".exe", "");
         _cover.Source = m.Cover;
-        _play.Content = m.IsPlaying ? "⏸" : "▶";
+        _play.SetPlaying(m.IsPlaying);
         double dur = m.Duration.TotalSeconds;
-        if (!_seeking && dur > 0) _seek.Value = Math.Clamp(m.LivePosition.TotalSeconds / dur, 0, 1);
-        _pos.Text = TimerService.Fmt(m.LivePosition); _dur.Text = TimerService.Fmt(m.Duration);
+        if (!_seek.Dragging)
+        {
+            _seek.Value = dur > 0 ? Math.Clamp(m.LivePosition.TotalSeconds / dur, 0, 1) : 0;
+            _pos.Text = TimerService.Fmt(m.LivePosition);
+        }
+        _dur.Text = TimerService.Fmt(m.Duration);
+        _fav.Tint(m.HasSession && Hub.S.Favorites.Contains(Key) ? Pink : (Brush)Application.Current.Resources["Fg"]);
 
         // слова
         string k = Hub.Lyrics.Synced ? "s" + Hub.Lyrics.Lines.Count + Key : "p" + Hub.Lyrics.Plain.Length + Key;

@@ -14,6 +14,7 @@ public class AppSettings
     public string Character { get; set; } = "Fox";
     public string Accent { get; set; } = "#7C5CFF";
     public bool DarkTheme { get; set; } = true;
+    public bool Glass { get; set; } = false;
     public bool OpenOnClick { get; set; } = false;
     public bool EdgeMode { get; set; } = false;
     public bool ShowLyricsInPill { get; set; } = true;

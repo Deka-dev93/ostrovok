@@ -137,6 +137,7 @@ public class SettingsTab : TabPage
         }
         p.Children.Add(accents);
 
+        p.Children.Add(Check("Стеклянный вид (можно вместе с тёмной темой)", () => Hub.S.Glass, v => { Hub.S.Glass = v; Theme.Apply(); }));
         p.Children.Add(Check("Тёмная тема", () => Hub.S.DarkTheme, v => { Hub.S.DarkTheme = v; Theme.Apply(); }));
         p.Children.Add(Check("Открывать по клику (а не по наведению)", () => Hub.S.OpenOnClick, v => Hub.S.OpenOnClick = v));
         p.Children.Add(Check("Режим «У края» — остров растёт из верхнего края", () => Hub.S.EdgeMode, v => { Hub.S.EdgeMode = v; _win.ApplyEdgeMode(); }));

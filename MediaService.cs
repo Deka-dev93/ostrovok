@@ -118,5 +118,13 @@ public class MediaService
     public async void PlayPause() { try { await _session?.TryTogglePlayPauseAsync(); } catch { Native.PressKey(Native.VK_MEDIA_PLAY); } }
     public async void Next() { try { await _session?.TrySkipNextAsync(); } catch { Native.PressKey(Native.VK_MEDIA_NEXT); } }
     public async void Prev() { try { await _session?.TrySkipPreviousAsync(); } catch { Native.PressKey(Native.VK_MEDIA_PREV); } }
+    /// <summary>Перемотка: интерфейс сразу показывает новую позицию, не дожидаясь ответа плеера.</summary>
+    public void SeekTo(TimeSpan t)
+    {
+        if (t < TimeSpan.Zero) t = TimeSpan.Zero;
+        if (Duration > TimeSpan.Zero && t > Duration) t = Duration;
+        Position = t; _posStamp = DateTime.UtcNow;
+        Seek(t);
+    }
     public async void Seek(TimeSpan t) { try { await _session?.TryChangePlaybackPositionAsync(t.Ticks); } catch { } }
 }

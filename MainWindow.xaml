@@ -7,8 +7,10 @@
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display" FontFamily="Segoe UI Variable Text, Segoe UI">
     <Border x:Name="Pill" Width="230" Height="36" HorizontalAlignment="Center" VerticalAlignment="Top"
             Background="{DynamicResource Bg}" CornerRadius="18" ClipToBounds="True"
-            BorderBrush="#22FFFFFF" BorderThickness="1">
+            BorderBrush="{DynamicResource Edge}" BorderThickness="1">
         <Grid>
+            <!-- Блик «стекла» -->
+            <Border x:Name="Sheen" IsHitTestVisible="False" Background="{DynamicResource Sheen}" CornerRadius="18"/>
             <!-- Свёрнутый вид -->
             <Grid x:Name="Compact" Margin="10,0">
                 <Grid.ColumnDefinitions>
