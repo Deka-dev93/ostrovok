@@ -14,6 +14,24 @@ static class Links
         if (string.IsNullOrEmpty(url)) return;
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
     }
+    static ControlTemplate _flat;
+    /// <summary>Невидимая кнопка-обёртка: клик по карточке работает, а остров не принимает его за перетаскивание.</summary>
+    public static Button Clickable(UIElement content, Action click)
+    {
+        if (_flat == null)
+        {
+            var tpl = new ControlTemplate(typeof(Button));
+            var f = new FrameworkElementFactory(typeof(ContentPresenter));
+            f.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
+            f.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            tpl.VisualTree = f;
+            _flat = tpl;
+        }
+        var b = new Button { Template = _flat, Content = content, Cursor = Cursors.Hand, Padding = new Thickness(0),
+                             Background = Brushes.Transparent, BorderThickness = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        b.Click += (_, _) => click();
+        return b;
+    }
     public static string Ago(DateTime t)
     {
         var d = DateTime.Now - t;
@@ -97,10 +115,7 @@ public class MailTab : TabPage
                 g.Children.Add(col);
                 var t = UI.Text(Links.Ago(m.Date), 11, false, true); Grid.SetColumn(t, 1); t.Margin = new Thickness(8, 0, 0, 0);
                 g.Children.Add(t);
-                var card = UI.Card(g, 8);
-                card.Cursor = Cursors.Hand;
-                card.MouseLeftButtonUp += (_, _) => Links.Open(web);
-                _list.Children.Add(card);
+                _list.Children.Add(Links.Clickable(UI.Card(g, 8), () => Links.Open(web)));
             }
             if (st.Unread > 8) _list.Children.Add(UI.Text($"… и ещё {st.Unread - 8}", 11, false, true));
         }
@@ -234,10 +249,7 @@ public class TelegramTab : TabPage
             g.Children.Add(col);
             var t = UI.Text(Links.Ago(n.Time), 11, false, true); Grid.SetColumn(t, 1); t.Margin = new Thickness(8, 0, 0, 0);
             g.Children.Add(t);
-            var card = UI.Card(g, 8);
-            card.Cursor = Cursors.Hand;
-            card.MouseLeftButtonUp += (_, _) => TelegramWindow.Open();
-            _list.Children.Add(card);
+            _list.Children.Add(Links.Clickable(UI.Card(g, 8), () => TelegramWindow.Open()));
         }
     }
 }

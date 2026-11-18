@@ -8,63 +8,6 @@ using Ostrovok.Services;
 
 namespace Ostrovok.Views;
 
-// ═════════════ 📅 Календарь ═════════════
-public class CalendarTab : TabPage
-{
-    readonly TextBox _in = UI.Input("18:30 созвон · завтра 9:00 врач · через 20 мин чай");
-    readonly TextBlock _status = UI.Text("", 11, false, true);
-    readonly StackPanel _list = new();
-
-    public CalendarTab()
-    {
-        RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-
-        _in.KeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Enter) return;
-            if (Hub.Reminders.Add(_in.Text)) { _in.Clear(); _status.Text = "Напоминание добавлено ✓"; }
-            else _status.Text = "Не понял время. Примеры: 18:30 · завтра 9:00 · через 20 мин";
-        };
-        SetRow(_in, 0); Children.Add(_in);
-        _status.Margin = new Thickness(2, 3, 0, 6); SetRow(_status, 1); Children.Add(_status);
-        var sv = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _list };
-        SetRow(sv, 2); Children.Add(sv);
-        Hub.Reminders.Changed += () => Dispatcher.BeginInvoke(Rebuild);
-    }
-
-    public override void OnShown()
-    {
-        _status.Text = string.IsNullOrEmpty(Hub.S.IcsUrl) ? "Ссылку на календарь (ICS) можно добавить в настройках" : "";
-        Rebuild();
-    }
-
-    void Rebuild()
-    {
-        _list.Children.Clear();
-        var items = new List<(DateTime when, string text, ReminderItem rem)>();
-        foreach (var r in Hub.S.Reminders.Where(r => !r.Fired)) items.Add((r.When, "🔔 " + r.Text, r));
-        foreach (var e in Hub.Reminders.IcsEvents.Where(e => e.Start > DateTime.Now.AddHours(-1))) items.Add((e.Start, "📅 " + e.Title, null));
-        if (items.Count == 0) { _list.Children.Add(UI.Text("Ближайших событий нет.", 12, false, true)); return; }
-        foreach (var (when, text, rem) in items.OrderBy(i => i.when).Take(30))
-        {
-            var d = new DockPanel();
-            if (rem != null)
-            {
-                var del = UI.Btn("✕", () => Hub.Reminders.Remove(rem));
-                DockPanel.SetDock(del, Dock.Right); d.Children.Add(del);
-            }
-            var c = new StackPanel();
-            c.Children.Add(UI.Text(text, 12.5, true));
-            string day = when.Date == DateTime.Today ? "сегодня" : when.Date == DateTime.Today.AddDays(1) ? "завтра" : when.ToString("d MMM");
-            c.Children.Add(UI.Text($"{day}, {when:HH:mm}", 11, false, true));
-            d.Children.Add(c);
-            _list.Children.Add(UI.Card(d, 8));
-        }
-    }
-}
-
 // ═════════════ 🖥 Система ═════════════
 public class SystemTab : TabPage
 {
