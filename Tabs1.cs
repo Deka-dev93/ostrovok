@@ -240,7 +240,7 @@ public class WeatherTab : TabPage
             if (e.Key != System.Windows.Input.Key.Enter) return;
             _desc.Text = "Ищу город…";
             if (await Hub.Weather.SetCityAsync(_city.Text)) { await Hub.Weather.RefreshAsync(); Show(); }
-            else _desc.Text = "Город не найден";
+            else _desc.Text = Hub.Weather.LastError.Length > 0 ? Hub.Weather.LastError : "Город не найден — попробуйте написать иначе";
         };
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -255,14 +255,26 @@ public class WeatherTab : TabPage
         SetRow(sv, 2); Children.Add(sv);
     }
 
-    public override void OnShown() { if (Hub.Weather.Last == null && !string.IsNullOrEmpty(Hub.S.City)) _ = Hub.Weather.RefreshAsync().ContinueWith(_ => Dispatcher.Invoke(Show)); Show(); }
+    public override void OnShown()
+    {
+        if (Hub.Weather.Last == null && !string.IsNullOrEmpty(Hub.S.City))
+            _ = Hub.Weather.RefreshAsync().ContinueWith(_ => Dispatcher.BeginInvoke(Show));
+        Show();
+    }
 
     static string Compass(double d) => new[] { "С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ" }[(int)Math.Round(d / 45.0) % 8];
 
     void Show()
     {
         var w = Hub.Weather.Last;
-        if (w == null) { _big.Text = ""; _desc.Text = "Введите город и нажмите Enter"; return; }
+        if (w == null)
+        {
+            _big.Text = "";
+            _desc.Text = Hub.Weather.LastError.Length > 0 ? Hub.Weather.LastError + ". Нажмите Enter, чтобы повторить."
+                       : string.IsNullOrEmpty(Hub.S.City) ? "Введите город и нажмите Enter" : "Загружаю погоду…";
+            _desc.TextWrapping = TextWrapping.Wrap; _desc.TextTrimming = TextTrimming.None;
+            return;
+        }
         _big.Text = $"{w.Icon} {Math.Round(w.Temp)}°";
         _desc.Text = $"{w.City} · {w.Description}";
         _info.Text = $"Ощущается как {Math.Round(w.Feels)}° · влажность {Math.Round(w.Humidity)}% · {Math.Round(w.Pressure)} мм рт. ст. · УФ {w.Uv:0.#}";

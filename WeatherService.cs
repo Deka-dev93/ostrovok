@@ -19,11 +19,30 @@ public class WeatherData
 /// <summary>Open-Meteo: без ключей. Геокодинг + прогноз.</summary>
 public class WeatherService
 {
-    static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
     public WeatherData Last;
+    /// <summary>Понятное описание последней ошибки (пусто, если всё хорошо).</summary>
+    public string LastError = "";
+
+    static string Explain(Exception ex) => ex switch
+    {
+        TaskCanceledException => "сервер погоды не отвечает (проверьте интернет, VPN или блокировку сайта open-meteo.com)",
+        HttpRequestException h when h.StatusCode != null => $"сервер погоды ответил ошибкой {(int)h.StatusCode}",
+        HttpRequestException => "нет доступа к серверу погоды (проверьте интернет, VPN, антивирус или брандмауэр)",
+        _ => ex.Message
+    };
+
+    // значения в ответе иногда бывают null — не падаем, а берём запасное
+    static double Num(JsonElement e, double fallback = 0) => e.ValueKind == JsonValueKind.Number ? e.GetDouble() : fallback;
+    static double Num(JsonElement obj, string name, double fallback = 0) => obj.TryGetProperty(name, out var v) ? Num(v, fallback) : fallback;
+    static string Str(JsonElement e) => e.ValueKind == JsonValueKind.String ? e.GetString() ?? "" : "";
+    static string Hm(string iso) => iso.Length >= 16 ? iso[11..16] : "—";
 
     public async Task<bool> SetCityAsync(string name)
     {
+        LastError = "";
+        name = (name ?? "").Trim();
+        if (name.Length == 0) return false;
         try
         {
             var json = await Http.GetStringAsync(
@@ -32,13 +51,13 @@ public class WeatherService
             if (!doc.RootElement.TryGetProperty("results", out var r) || r.GetArrayLength() == 0) return false;
             var c = r[0];
             var s = AppSettings.Current;
-            s.City = c.GetProperty("name").GetString();
+            s.City = Str(c.GetProperty("name"));
             s.Lat = c.GetProperty("latitude").GetDouble();
             s.Lon = c.GetProperty("longitude").GetDouble();
             s.Save();
             return true;
         }
-        catch (Exception ex) { AppSettings.Log("geocode: " + ex.Message); return false; }
+        catch (Exception ex) { AppSettings.Log("geocode: " + ex); LastError = "Не удалось найти город: " + Explain(ex); return false; }
     }
 
     public async Task<WeatherData> RefreshAsync()
@@ -58,38 +77,41 @@ public class WeatherService
             var w = new WeatherData
             {
                 City = s.City,
-                Temp = cur.GetProperty("temperature_2m").GetDouble(),
-                Feels = cur.GetProperty("apparent_temperature").GetDouble(),
-                Humidity = cur.GetProperty("relative_humidity_2m").GetDouble(),
-                Pressure = cur.GetProperty("pressure_msl").GetDouble() * 0.750062,
-                WindSpeed = cur.GetProperty("wind_speed_10m").GetDouble(),
-                WindDir = cur.GetProperty("wind_direction_10m").GetDouble(),
-                Code = cur.GetProperty("weather_code").GetInt32(),
-                IsDay = cur.GetProperty("is_day").GetInt32() == 1,
-                Precip = cur.GetProperty("precipitation").GetDouble(),
+                Temp = Num(cur, "temperature_2m"),
+                Feels = Num(cur, "apparent_temperature", Num(cur, "temperature_2m")),
+                Humidity = Num(cur, "relative_humidity_2m"),
+                Pressure = Num(cur, "pressure_msl") * 0.750062,
+                WindSpeed = Num(cur, "wind_speed_10m"),
+                WindDir = Num(cur, "wind_direction_10m"),
+                Code = (int)Num(cur, "weather_code"),
+                IsDay = Num(cur, "is_day", 1) >= 1,
+                Precip = Num(cur, "precipitation"),
             };
-            var d = root.GetProperty("daily");
-            w.Sunrise = d.GetProperty("sunrise")[0].GetString()[11..16];
-            w.Sunset = d.GetProperty("sunset")[0].GetString()[11..16];
-            w.Uv = d.GetProperty("uv_index_max")[0].GetDouble();
-            var h = root.GetProperty("hourly");
-            var times = h.GetProperty("time"); var temps = h.GetProperty("temperature_2m");
-            var codes = h.GetProperty("weather_code"); var pr = h.GetProperty("precipitation_probability");
-            var now = DateTime.Now;
-            for (int i = 0; i < times.GetArrayLength() && w.Hours.Count < 8; i++)
+            if (root.TryGetProperty("daily", out var d))
             {
-                var t = DateTime.Parse(times[i].GetString());
-                if (t < now.AddMinutes(-59)) continue;
-                w.Hours.Add(new HourPoint
-                {
-                    Time = t.ToString("HH:mm"), Temp = temps[i].GetDouble(), Code = codes[i].GetInt32(),
-                    Precip = pr[i].ValueKind == JsonValueKind.Number ? pr[i].GetDouble() : 0
-                });
+                if (d.TryGetProperty("sunrise", out var sr) && sr.GetArrayLength() > 0) w.Sunrise = Hm(Str(sr[0]));
+                if (d.TryGetProperty("sunset", out var ss) && ss.GetArrayLength() > 0) w.Sunset = Hm(Str(ss[0]));
+                if (d.TryGetProperty("uv_index_max", out var uv) && uv.GetArrayLength() > 0) w.Uv = Num(uv[0]);
             }
-            Last = w;
+            if (root.TryGetProperty("hourly", out var h))
+            {
+                var times = h.GetProperty("time"); var temps = h.GetProperty("temperature_2m");
+                var codes = h.GetProperty("weather_code"); var pr = h.GetProperty("precipitation_probability");
+                var now = DateTime.Now;
+                for (int i = 0; i < times.GetArrayLength() && w.Hours.Count < 8; i++)
+                {
+                    if (!DateTime.TryParse(Str(times[i]), inv, System.Globalization.DateTimeStyles.None, out var t)) continue;
+                    if (t < now.AddMinutes(-59)) continue;
+                    w.Hours.Add(new HourPoint
+                    {
+                        Time = t.ToString("HH:mm"), Temp = Num(temps[i]), Code = (int)Num(codes[i]), Precip = Num(pr[i])
+                    });
+                }
+            }
+            Last = w; LastError = "";
             return w;
         }
-        catch (Exception ex) { AppSettings.Log("weather: " + ex.Message); return Last; }
+        catch (Exception ex) { AppSettings.Log("weather: " + ex); LastError = "Не удалось получить погоду: " + Explain(ex); return Last; }
     }
 
     public static string Describe(int c) => c switch
