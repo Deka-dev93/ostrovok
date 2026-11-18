@@ -15,6 +15,9 @@ public static class Hub
     public static readonly ClipboardService Clip = new();
     public static readonly ReminderService Reminders = new();
     public static readonly NotificationService Notices = new();
+    public static readonly MailboxService Mail = new();
+    public static readonly TelegramService Telegram = new();
+    public static readonly HeadphoneService Headphones = new();
     public static AppSettings S => AppSettings.Current;
 }
 

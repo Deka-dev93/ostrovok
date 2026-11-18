@@ -70,6 +70,7 @@ public partial class MainWindow : Window
         var wa = SystemParameters.WorkArea;
         _centerX = Hub.S.Left ?? SystemParameters.PrimaryScreenWidth / 2;
         _topBase = Hub.S.EdgeMode ? 0 : (Hub.S.Top ?? 8);
+        ClampPosition();
         _y.Value = -CompactH - 6; _y.Target = 0;
         ApplyShape();
         ApplyBounds();
@@ -104,6 +105,11 @@ public partial class MainWindow : Window
         await Hub.Media.InitAsync();
         _ = Hub.Reminders.LoadIcsAsync();
         _ = Hub.Notices.InitSystemAsync();
+        Hub.Mail.Changed += () => Dispatcher.BeginInvoke(UpdateBadges);
+        Hub.Telegram.Changed += () => Dispatcher.BeginInvoke(UpdateBadges);
+        Hub.Mail.Start();
+        Hub.Headphones.Start();
+        if (Hub.S.TelegramPreload) TelegramWindow.Preload();
         RefreshCompact();
     }
 
@@ -393,9 +399,18 @@ public partial class MainWindow : Window
         if (!_dragging) return;
         var p = CursorDip();
         _centerX = _dragCx + (p.X - _dragStart.X);
-        _topBase = Math.Max(-8, _dragTop + (p.Y - _dragStart.Y));
-        if (Hub.S.EdgeMode) _topBase = 0;
+        _topBase = _dragTop + (p.Y - _dragStart.Y);
+        ClampPosition();
         ApplyBounds();
+    }
+
+    /// <summary>Остров всегда остаётся на экране: нельзя утащить за край или потерять.</summary>
+    void ClampPosition()
+    {
+        double l = SystemParameters.VirtualScreenLeft, t = SystemParameters.VirtualScreenTop;
+        double w = SystemParameters.VirtualScreenWidth, h = SystemParameters.VirtualScreenHeight;
+        _centerX = Math.Clamp(_centerX, l + 120, l + w - 120);
+        _topBase = Hub.S.EdgeMode ? 0 : Math.Clamp(_topBase, t, t + h - 60);
     }
 
     void OnUp(object s, MouseButtonEventArgs e)
@@ -403,8 +418,10 @@ public partial class MainWindow : Window
         if (!_dragging) return;
         _dragging = false; ReleaseMouseCapture();
         var p = CursorDip();
-        // смахнули вверх — спрятать
-        if ((_dragStart.Y - p.Y) > 40 && !Hub.S.EdgeMode) { _topBase = Hub.S.Top ?? 8; _centerX = _dragCx; ToggleHidden(); return; }
+        // «магнит»: у верхнего края и у центра экрана остров прилипает на своё штатное место
+        if (!Hub.S.EdgeMode && _topBase < 24) _topBase = 8;
+        if (Math.Abs(_centerX - SystemParameters.PrimaryScreenWidth / 2) < 30) _centerX = SystemParameters.PrimaryScreenWidth / 2;
+        ClampPosition(); ApplyBounds();
         Hub.S.Left = _centerX; if (!Hub.S.EdgeMode) Hub.S.Top = _topBase; Hub.S.Save();
     }
 
@@ -413,7 +430,8 @@ public partial class MainWindow : Window
     {
         var m = new ContextMenu();
         void Add(string t, Action a) { var i = new MenuItem { Header = t }; i.Click += (_, _) => a(); m.Items.Add(i); }
-        Add("Спрятать / показать", ToggleHidden);
+        Add("Спрятать (вернуть — Ctrl+Alt+I)", ToggleHidden);
+        Add("Вернуть на место (вверх по центру)", () => { _centerX = SystemParameters.PrimaryScreenWidth / 2; _topBase = Hub.S.EdgeMode ? 0 : 8; Hub.S.Left = _centerX; Hub.S.Top = _topBase; Hub.S.Save(); ApplyBounds(); });
         Add(Hub.S.DarkTheme ? "Светлая тема" : "Тёмная тема", ToggleTheme);
         Add("Настройки", () => OpenIsland(_tabs.Count - 1));
         m.Items.Add(new Separator());
@@ -441,6 +459,8 @@ public partial class MainWindow : Window
         _tabs.Add(("🎵", "Музыка", () => new MusicTab()));
         _tabs.Add(("☀️", "Погода", () => new WeatherTab()));
         _tabs.Add(("💬", "Чат", () => new ChatTab()));
+        _tabs.Add(("📧", "Почта", () => new MailTab()));
+        _tabs.Add(("✈️", "Telegram", () => new TelegramTab()));
         _tabs.Add(("⏱", "Таймер", () => new TimerTab()));
         _tabs.Add(("📋", "Буфер", () => new ClipboardTab()));
         _tabs.Add(("📝", "Заметки", () => new NotesTab()));
@@ -455,6 +475,15 @@ public partial class MainWindow : Window
                                  Style = (Style)Application.Current.FindResource("IconBtn"), Margin = new Thickness(0, 0, 2, 0) };
             b.Click += (_, _) => ShowTab(idx);
             TabBar.Children.Add(b); _tabBtns.Add(b);
+        }
+    }
+
+    void UpdateBadges()
+    {
+        for (int i = 0; i < _tabs.Count && i < _tabBtns.Count; i++)
+        {
+            int n = _tabs[i].name == "Почта" ? Hub.Mail.TotalUnread : _tabs[i].name == "Telegram" ? Hub.Telegram.Unread : 0;
+            _tabBtns[i].Content = n > 0 ? _tabs[i].icon + " " + (n > 99 ? "99+" : n.ToString()) : _tabs[i].icon;
         }
     }
 

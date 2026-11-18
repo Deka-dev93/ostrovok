@@ -68,7 +68,7 @@ public class CalendarTab : TabPage
 // ═════════════ 🖥 Система ═════════════
 public class SystemTab : TabPage
 {
-    readonly TextBlock _cpu = UI.Text("", 13), _ram = UI.Text("", 13), _bat = UI.Text("", 13), _gpu = UI.Text("GPU: —", 13);
+    readonly TextBlock _cpu = UI.Text("", 13), _ram = UI.Text("", 13), _bat = UI.Text("", 13), _gpu = UI.Text("GPU: —", 13), _hp = UI.Text("", 13);
     readonly System.Windows.Controls.ProgressBar _cpuBar = Bar(), _ramBar = Bar();
     readonly List<PerformanceCounter> _gpu3d = new();
     bool _gpuTried;
@@ -84,7 +84,7 @@ public class SystemTab : TabPage
         var p = new StackPanel();
         p.Children.Add(_cpu); p.Children.Add(_cpuBar);
         p.Children.Add(_ram); p.Children.Add(_ramBar);
-        p.Children.Add(_gpu); p.Children.Add(_bat);
+        p.Children.Add(_gpu); p.Children.Add(_bat); p.Children.Add(_hp);
         var dnd = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
         dnd.Children.Add(UI.Btn("🌙 Фокус 30 мин", () => Focus(30)));
         dnd.Children.Add(UI.Btn("1 ч", () => Focus(60)));
@@ -122,6 +122,8 @@ public class SystemTab : TabPage
         if (Native.GetSystemPowerStatus(out var s) && s.BatteryLifePercent <= 100)
             _bat.Text = $"🔋 {s.BatteryLifePercent}%" + (s.ACLineStatus == 1 ? " · заряжается" : "");
         else _bat.Text = "🔌 От сети";
+        _hp.Text = string.Join("   ", Hub.Headphones.Devices.Select(d => $"🎧 {d.Name}" + (d.Battery >= 0 ? $" · {d.Battery}%" : " · заряд неизвестен")));
+        _hp.Visibility = _hp.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
         if (!_gpuTried)
         {
@@ -197,6 +199,7 @@ public class SettingsTab : TabPage
         p.Children.Add(Check("Режим «У края» — остров растёт из верхнего края", () => Hub.S.EdgeMode, v => { Hub.S.EdgeMode = v; _win.ApplyEdgeMode(); }));
         p.Children.Add(Check("Строка песни в пилюле (караоке)", () => Hub.S.ShowLyricsInPill, v => Hub.S.ShowLyricsInPill = v));
         p.Children.Add(Check("Прятаться в играх и полноэкранном видео", () => Hub.S.HideInFullscreen, v => Hub.S.HideInFullscreen = v));
+        p.Children.Add(Check("Telegram работает в фоне (уведомления; выключение — после перезапуска)", () => Hub.S.TelegramPreload, v => { Hub.S.TelegramPreload = v; if (v) TelegramWindow.Preload(); }));
         p.Children.Add(Check("Запускать вместе с Windows", () => Hub.S.Autostart, v => { Hub.S.Autostart = v; SetAutostart(v); }));
 
         var ics = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };

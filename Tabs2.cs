@@ -65,8 +65,7 @@ public class ChatWindow : Window
         {
             try
             {
-                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Ostrovok", "WebView2");
-                var env = await CoreWebView2Environment.CreateAsync(null, dir);
+                var env = await WebEnv.Get();
                 await _web.EnsureCoreWebView2Async(env);
                 _web.CoreWebView2.NewWindowRequested += (_, e) =>
                 {

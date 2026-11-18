@@ -12,7 +12,7 @@ public enum Mood { Normal, Love, Angry, Surprised, Sad, Dizzy, Laugh, Cool }
 /// </summary>
 public class CharacterControl : FrameworkElement
 {
-    public static readonly string[] Kinds = { "Fox", "Cat", "Bear", "Ghost", "Robot", "Spark" };
+    public static readonly string[] Kinds = { "Fox", "Cat", "Bear", "Ghost", "Robot", "Spark", "Slime" };
 
     string _kind = "Fox";
     public string Kind { get => _kind; set { if (_kind != value) { _kind = value; _palKind = null; } } }
@@ -106,6 +106,7 @@ public class CharacterControl : FrameworkElement
             "Ghost" => (C("#F1F3FF"), C("#8E96C9")),
             "Robot" => (C("#8FD3FF"), C("#2F6E99")),
             "Spark" => (C("#E8825B"), C("#A8482A")),
+            "Slime" => (C("#6EE7A8"), C("#1F7A55")),
             _ => (C("#FF9B4A"), C("#8F4A12")),
         };
         _body = new SolidColorBrush(body); _body.Freeze();
@@ -222,6 +223,24 @@ public class CharacterControl : FrameworkElement
                 dc.DrawEllipse(new SolidColorBrush(C("#FF6B6B")), _pen, new Point(50, 7), 3.5, 3.5);
                 dc.DrawGeometry(_body, _pen, Poly(true, (14, 30), (86, 30), (86, 88), (14, 88)));
                 return;
+            case "Slime":
+                {
+                    double sq = Math.Sin(_time * 3) * 2.2;
+                    var g = new StreamGeometry();
+                    using (var c = g.Open())
+                    {
+                        c.BeginFigure(new Point(12, 88), true, true);
+                        c.BezierTo(new Point(4, 60 - sq), new Point(26, 24 + sq), new Point(50, 24 + sq), true, true);
+                        c.BezierTo(new Point(74, 24 + sq), new Point(96, 60 - sq), new Point(88, 88), true, true);
+                        c.BezierTo(new Point(70, 93 + sq * 0.5), new Point(30, 93 + sq * 0.5), new Point(12, 88), true, true);
+                    }
+                    g.Freeze();
+                    dc.DrawGeometry(_body, _pen, g);
+                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(130, 255, 255, 255)), null, new Point(31, 42 + sq), 6.5, 3.5);
+                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(70, 255, 90, 120)), null, new Point(24, 68), 6, 4);
+                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(70, 255, 90, 120)), null, new Point(76, 68), 6, 4);
+                    return;
+                }
             case "Ghost":
                 {
                     var g = new StreamGeometry();

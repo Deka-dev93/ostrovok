@@ -21,6 +21,7 @@ public class AppSettings
     public bool Autostart { get; set; } = false;
     public string ChatProvider { get; set; } = "claude";
     public string IcsUrl { get; set; } = "";
+    public bool TelegramPreload { get; set; } = false;
     public double? Left { get; set; }
     public double? Top { get; set; }
     public List<NoteItem> Notes { get; set; } = new();
