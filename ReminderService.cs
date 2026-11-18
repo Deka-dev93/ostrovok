@@ -139,7 +139,7 @@ public class ReminderService
         catch (Exception ex) { AppSettings.Log("ics: " + ex.Message); return "Не удалось загрузить календарь."; }
     }
 
-    static string Unesc(string s) => s.Replace("\\n", " ").Replace("\\N", " ").Replace("\\,", ",").Replace("\;", ";").Replace("\\\\", "\\").Trim();
+    static string Unesc(string s) => s.Replace("\\n", " ").Replace("\\N", " ").Replace("\\,", ",").Replace("\\;", ";").Replace("\\\\", "\\").Trim();
 
     static Dictionary<string, List<(string par, string val)>> Props(string body)
     {
