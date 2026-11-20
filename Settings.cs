@@ -15,6 +15,7 @@ public class AppSettings
     public string Accent { get; set; } = "#7C5CFF";
     public bool DarkTheme { get; set; } = true;
     public bool Glass { get; set; } = false;
+    public List<string> Dock { get; set; } = new() { "explorer.exe", "notepad.exe", "calc.exe", "mspaint.exe", "powershell.exe", "taskmgr.exe" };
     public string HolidayMode { get; set; } = "always";      // date | always | off
     public bool HolidaySnowScreen { get; set; } = true;
     public bool HolidaySnowCap { get; set; } = true;

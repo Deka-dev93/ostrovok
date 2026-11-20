@@ -18,6 +18,7 @@ public static class Hub
     public static readonly MailboxService Mail = new();
     public static readonly TelegramService Telegram = new();
     public static readonly HeadphoneService Headphones = new();
+    public static readonly VolumeService Volume = new();
     public static AppSettings S => AppSettings.Current;
 }
 
