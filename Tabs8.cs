@@ -50,7 +50,7 @@ public class ShelfTab : TabPage
         _toggle.Margin = new Thickness(0, 6, 0, 0);
         ph.Children.Add(_state); ph.Children.Add(_toggle);
         var dl = new CheckBox { Content = "Показывать загрузки в острове", IsChecked = Hub.S.ShowDownloads, Margin = new Thickness(0, 8, 0, 0), FontSize = 11 };
-        dl.SetResourceReference(ForegroundProperty, "FgDim");
+        dl.SetResourceReference(Control.ForegroundProperty, "FgDim");
         dl.Click += (_, _) => { Hub.S.ShowDownloads = dl.IsChecked == true; Hub.S.Save(); };
         ph.Children.Add(dl);
         SetColumn(ph, 0); Children.Add(ph);
