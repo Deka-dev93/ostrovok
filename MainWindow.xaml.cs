@@ -65,6 +65,9 @@ public partial class MainWindow : Window
         _src = HwndSource.FromHwnd(h);
         _src.AddHook(WndProc);
         Hub.Clip.Attach(_src);
+        Hub.Downloads.Changed += () => Dispatcher.BeginInvoke(RefreshCompact);
+        Hub.Downloads.Start();
+        if (Hub.S.ShelfOn) _ = Hub.Shelf.StartAsync();
         RegisterHotkeys(h);
 
         var wa = SystemParameters.WorkArea;
@@ -218,17 +221,19 @@ public partial class MainWindow : Window
             Activity.Idle => (CompactW, CompactH),
             Activity.Music => (Hub.S.ShowLyricsInPill && Hub.Lyrics.Synced ? 330 : 270, CompactH),
             Activity.Notice => (340, 38),
+            Activity.Download => (300, CompactH),
             _ => (240, CompactH),
         };
     }
 
     // ───────── живые активности ─────────
-    enum Activity { Idle, Music, Timer, Notice }
+    enum Activity { Idle, Music, Timer, Notice, Download }
 
     List<Activity> Activities()
     {
         var l = new List<Activity>();
         if (_notice != null && DateTime.Now < _noticeUntil) l.Add(Activity.Notice);
+        if (Hub.Downloads.Active) l.Add(Activity.Download);
         if (Hub.Timer.Active) l.Add(Activity.Timer);
         if (Hub.Media.HasSession && Hub.Media.IsPlaying) l.Add(Activity.Music);
         if (l.Count == 0) l.Add(Activity.Idle);
@@ -274,6 +279,10 @@ public partial class MainWindow : Window
             case Activity.Notice:
                 CompactText.Text = $"{_notice.Title}  {_notice.Body}".Trim();
                 CompactRight.Content = _rightText; _rightText.Text = "🔔";
+                break;
+            case Activity.Download:
+                CompactText.Text = $"{Hub.Downloads.Name}  {Hub.Downloads.SpeedText}";
+                CompactRight.Content = _rightText; _rightText.Text = "⬇";
                 break;
             case Activity.Timer:
                 string label = Hub.Timer.Mode == TimerMode.Pomodoro ? (Hub.Timer.PomodoroBreak ? "Перерыв" : "Фокус")
@@ -503,6 +512,7 @@ public partial class MainWindow : Window
         _all.Add(("✈️", "Telegram", () => new TelegramTab()));
         _all.Add(("⏱", "Таймер", () => new TimerTab()));
         _all.Add(("📋", "Буфер", () => new ClipboardTab()));
+        _all.Add(("🗄", "Полка", () => new ShelfTab()));
         _all.Add(("📝", "Заметки", () => new NotesTab()));
         _all.Add(("📅", "Календарь", () => new CalendarTab()));
         _all.Add(("🖥", "Система", () => new SystemTab()));

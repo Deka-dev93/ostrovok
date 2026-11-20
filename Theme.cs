@@ -19,6 +19,8 @@ public static class Hub
     public static readonly TelegramService Telegram = new();
     public static readonly HeadphoneService Headphones = new();
     public static readonly VolumeService Volume = new();
+    public static readonly ShelfService Shelf = new();
+    public static readonly DownloadService Downloads = new();
     public static AppSettings S => AppSettings.Current;
 }
 
