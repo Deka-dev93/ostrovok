@@ -26,7 +26,7 @@ public class ShelfTab : TabPage
         AllowDrop = true; Background = Brushes.Transparent;
         Drop += (_, e) =>
         {
-            if (e.Data.GetData(DataFormats.FileDrop) is string[] fs) foreach (var f in fs) if (File.Exists(f)) Hub.Shelf.Add(f);
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] fs) { foreach (var f in fs) if (File.Exists(f)) Hub.Shelf.Add(f); e.Handled = true; }
         };
         Hub.Shelf.Changed += () => _dirty = true;
 

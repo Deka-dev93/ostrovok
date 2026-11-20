@@ -62,11 +62,11 @@ public static class Theme
         }
         else
         {
-            r["Bg"] = B(dark ? "#F2101013" : "#F5F3F4F8");
-            r["Edge"] = B("#22FFFFFF");
+            r["Bg"] = B(dark ? "#FF050507" : "#F5F3F4F8");
+            r["Edge"] = B(dark ? "#2AFFFFFF" : "#22FFFFFF");
             r["Sheen"] = Brushes.Transparent;
-            r["Card"] = B(dark ? "#1FFFFFFF" : "#14000000");
-            r["CardHover"] = B(dark ? "#38FFFFFF" : "#26000000");
+            r["Card"] = B(dark ? "#14FFFFFF" : "#14000000");
+            r["CardHover"] = B(dark ? "#2AFFFFFF" : "#26000000");
         }
         var a = new SolidColorBrush(AccentColor); a.Freeze();
         r["Accent"] = a;

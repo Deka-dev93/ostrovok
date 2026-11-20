@@ -176,14 +176,16 @@ public class ShelfService
         sb.Append("""
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Островок</title><style>
-body{font-family:-apple-system,Segoe UI,sans-serif;background:#111;color:#f2f2f2;margin:0;padding:18px;max-width:560px;margin:auto}
-h1{font-size:22px}h2{font-size:15px;color:#aaa;margin-top:26px}
-.card{background:#1d1d1f;border-radius:16px;padding:14px;margin:10px 0}
+body{font-family:-apple-system,Segoe UI,sans-serif;background:#000;color:#f2f2f2;margin:0;padding:0 16px 24px;max-width:560px;margin:auto}
+.hd{margin:0 -16px;padding:34px 22px 30px;background:linear-gradient(#a3a4ff,#7f80f2);border-radius:0 0 34px 34px;color:#10102a}
+.hd p{margin:4px 0 0;opacity:.7;font-size:14px}
+h1{font-size:26px;margin:0}h2{font-size:15px;color:#aaa;margin-top:26px}
+.card{background:#121214;border-radius:16px;padding:14px;margin:10px 0}
 input[type=file]{width:100%;color:#ccc}textarea{width:100%;box-sizing:border-box;background:#2a2a2c;color:#fff;border:0;border-radius:10px;padding:10px;font-size:16px;min-height:80px}
-button{background:#0a84ff;color:#fff;border:0;border-radius:12px;padding:11px 18px;font-size:16px;margin-top:10px}
-a{color:#4da3ff;text-decoration:none;display:block;padding:8px 0;border-bottom:1px solid #2a2a2c;word-break:break-all}
-.ok{background:#1f3d27;color:#9fe3b0;padding:10px 14px;border-radius:12px}
-</style></head><body><h1>🏝 Островок</h1>
+button{background:#8b8cff;color:#0b0b1f;font-weight:600;border:0;border-radius:12px;padding:11px 18px;font-size:16px;margin-top:10px}
+a{color:#a3a4ff;text-decoration:none;display:block;padding:8px 0;border-bottom:1px solid #2a2a2c;word-break:break-all}
+.ok{background:#1a1a3a;color:#c9caff;padding:10px 14px;border-radius:12px}
+</style></head><body><div class=hd><h1>На компьютер</h1><p>Подключено к острову по домашнему Wi-Fi</p></div>
 """);
         sb.Append("<div id=ok></div><script>if(location.search.includes('ok=1'))document.getElementById('ok').innerHTML='<div class=ok>Готово — отправлено на компьютер</div>'</script>");
         sb.Append($"<h2>Отправить файлы на компьютер</h2><form class=card method=post enctype=multipart/form-data action=\"/{t}/upload\"><input type=file name=files multiple><button>Отправить</button></form>");

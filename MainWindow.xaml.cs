@@ -40,6 +40,19 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        AllowDrop = true;
+        DragEnter += (_, e) =>
+        {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            int si = _tabs.FindIndex(t => t.name == "Полка");
+            if (!_open && si >= 0) OpenIsland(si);
+        };
+        Drop += (_, e) =>
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is not string[] fs) return;
+            int n = 0; foreach (var f in fs) if (System.IO.File.Exists(f) && Hub.Shelf.Add(f) != null) n++;
+            if (n > 0) Hub.Notices.Push("Полка", "🗄 На полке", n == 1 ? System.IO.Path.GetFileName(fs[0]) : $"{n} файлов");
+        };
         Theme.Apply();
         CompactChar.Content = _charC; ExpChar.Content = _charE;
         Expanded.RenderTransformOrigin = new Point(0.5, 0); Expanded.RenderTransform = _expScale;
@@ -458,7 +471,7 @@ public partial class MainWindow : Window
         Add("Вернуть на место (вверх по центру)", () => { _centerX = SystemParameters.PrimaryScreenWidth / 2; _topBase = Hub.S.EdgeMode ? 0 : 8; Hub.S.Left = _centerX; Hub.S.Top = _topBase; Hub.S.Save(); ApplyBounds(); });
         Add(Hub.S.DarkTheme ? "Светлая тема" : "Тёмная тема", ToggleTheme);
         Add(Hub.S.Glass ? "Обычный вид (без стекла)" : "Стеклянный вид", ToggleGlass);
-        Add("Настройки", () => OpenIsland(_tabs.FindIndex(t => t.name == "Настройки")));
+        Add("Настройки", () => SettingsWindow.ShowIt(this));
         m.Items.Add(new Separator());
         Add("Выход", () => { Hub.S.Save(); Application.Current.Shutdown(); });
         m.IsOpen = true;
@@ -501,6 +514,56 @@ public partial class MainWindow : Window
     // ───────── вкладки ─────────
     readonly List<(string icon, string name, Func<TabPage> make)> _all = new();
     static readonly string[] Pinned = { "Вкладки", "Настройки" };
+    static readonly string[] InSettings = { "Вкладки", "Настройки", "Праздники" };
+    public TabPage MakePage(string name) => _all.First(t => t.name == name).make();
+
+    static readonly Dictionary<string, string> Glyphs8 = new()
+    {
+        ["Главная"] = "\uE80F", ["Музыка"] = "\uE8D6", ["Погода"] = "\uE706", ["Чат"] = "\uE8BD", ["Почта"] = "\uE715", ["Telegram"] = "\uE724",
+        ["Таймер"] = "\uE916", ["Буфер"] = "\uE77F", ["Полка"] = "\uE8B7", ["Заметки"] = "\uE70F", ["Календарь"] = "\uE787", ["Система"] = "\uE7F8",
+    };
+    static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
+
+    object TabContent(int i)
+    {
+        var info = _tabs[i]; bool act = i == _tabIndex;
+        int n = info.name == "Почта" ? Hub.Mail.TotalUnread : info.name == "Telegram" ? Hub.Telegram.Unread : 0;
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        var ic = Glyphs8.TryGetValue(info.name, out var g) ? new TextBlock { Text = g, FontFamily = IconFont, FontSize = 14 } : new TextBlock { Text = info.icon, FontSize = 14 };
+        ic.VerticalAlignment = VerticalAlignment.Center;
+        ic.SetResourceReference(TextBlock.ForegroundProperty, act ? "Fg" : "FgDim");
+        sp.Children.Add(ic);
+        if (act)
+        {
+            var l = new TextBlock { Text = info.name, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center };
+            l.SetResourceReference(TextBlock.ForegroundProperty, "Fg"); sp.Children.Add(l);
+        }
+        if (n > 0)
+        {
+            var bd = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(5, 0, 5, 0), Margin = new Thickness(5, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+                                  Child = new TextBlock { Text = n > 99 ? "99+" : n.ToString(), FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White } };
+            bd.SetResourceReference(Border.BackgroundProperty, "Accent");
+            sp.Children.Add(bd);
+        }
+        return sp;
+    }
+
+    void BuildBarRight()
+    {
+        BarRight.Children.Clear();
+        Button Mk(string glyph, string tip, Action a)
+        {
+            var b = new Button { Content = new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = 14 }, ToolTip = tip, Background = Brushes.Transparent,
+                                 Style = (Style)Application.Current.FindResource("IconBtn"), Padding = new Thickness(8, 5, 8, 5), Margin = new Thickness(0, 0, 1, 0) };
+            ((TextBlock)b.Content).SetResourceReference(TextBlock.ForegroundProperty, "FgDim");
+            b.Background = Brushes.Transparent;
+            b.Click += (_, _) => a();
+            return b;
+        }
+        BarRight.Children.Add(Mk("\uE793", "Светлая / тёмная тема", ToggleTheme));
+        BarRight.Children.Add(Mk("\uE7F4", "Стеклянный вид", ToggleGlass));
+        BarRight.Children.Add(Mk("\uE713", "Настройки", () => SettingsWindow.ShowIt(this)));
+    }
 
     void BuildTabs()
     {
@@ -541,16 +604,18 @@ public partial class MainWindow : Window
         foreach (var info in TabInfos())
         {
             if (Hub.S.HiddenTabs.Contains(info.name) && !Pinned.Contains(info.name)) continue;
+            if (InSettings.Contains(info.name)) continue;
             _tabs.Add(_all.First(t => t.name == info.name));
         }
         for (int i = 0; i < _tabs.Count; i++)
         {
             int idx = i;
-            var b = new Button { Content = _tabs[i].icon, ToolTip = _tabs[i].name, Padding = new Thickness(8, 4, 8, 4), FontSize = 14,
-                                 Style = (Style)Application.Current.FindResource("IconBtn"), Margin = new Thickness(0, 0, 2, 0) };
+            var b = new Button { ToolTip = _tabs[i].name, Padding = new Thickness(9, 5, 9, 5), FontSize = 14, Background = Brushes.Transparent,
+                                 Style = (Style)Application.Current.FindResource("IconBtn"), Margin = new Thickness(0, 0, 1, 0) };
             b.Click += (_, _) => ShowTab(idx);
             TabBar.Children.Add(b); _tabBtns.Add(b);
         }
+        BuildBarRight();
         int keep = cur == null ? 0 : _tabs.FindIndex(t => t.name == cur);
         _tabIndex = keep < 0 ? 0 : keep;
         if (_open) ShowTab(_tabIndex);
@@ -559,11 +624,7 @@ public partial class MainWindow : Window
 
     void UpdateBadges()
     {
-        for (int i = 0; i < _tabs.Count && i < _tabBtns.Count; i++)
-        {
-            int n = _tabs[i].name == "Почта" ? Hub.Mail.TotalUnread : _tabs[i].name == "Telegram" ? Hub.Telegram.Unread : 0;
-            _tabBtns[i].Content = n > 0 ? _tabs[i].icon + " " + (n > 99 ? "99+" : n.ToString()) : _tabs[i].icon;
-        }
+        for (int i = 0; i < _tabs.Count && i < _tabBtns.Count; i++) _tabBtns[i].Content = TabContent(i);
     }
 
     TabPage Page(int i)
@@ -582,9 +643,15 @@ public partial class MainWindow : Window
         p.OnShown();
         for (int k = 0; k < _tabBtns.Count; k++)
         {
-            if (k == i) _tabBtns[k].SetResourceReference(Control.BackgroundProperty, "Accent");
-            else _tabBtns[k].SetResourceReference(Control.BackgroundProperty, "Card");
+            if (k == i) _tabBtns[k].SetResourceReference(Control.BackgroundProperty, "CardHover");
+            else _tabBtns[k].Background = Brushes.Transparent;
         }
+        UpdateBadges();
+        // мягкое появление страницы: лёгкий сдвиг снизу + проявление
+        var tt = new TranslateTransform(0, 10); Host.RenderTransform = tt;
+        var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+        tt.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+        Host.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
         _charE.ShowEmotion(Mood.Laugh, 0.5);
     }
 
