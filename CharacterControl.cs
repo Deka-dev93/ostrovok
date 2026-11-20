@@ -107,6 +107,11 @@ public class CharacterControl : FrameworkElement
             "Robot" => (C("#8FD3FF"), C("#2F6E99")),
             "Spark" => (C("#E8825B"), C("#A8482A")),
             "Slime" => (C("#6EE7A8"), C("#1F7A55")),
+            "Snowman" => (C("#F4F8FF"), C("#5E7096")),
+            "Santa" => (C("#FFD3B3"), C("#8C3A2B")),
+            "Bullfinch" => (C("#EE6A55"), C("#6B2218")),
+            "Gingerbread" => (C("#C98A4B"), C("#5A3517")),
+            "Reindeer" => (C("#B07A45"), C("#4B2C14")),
             _ => (C("#FF9B4A"), C("#8F4A12")),
         };
         _body = new SolidColorBrush(body); _body.Freeze();
@@ -191,6 +196,7 @@ public class CharacterControl : FrameworkElement
         if (Kind == "Spark") DrawSpark(dc);
         else DrawHead(dc);
         DrawFace(dc);
+        DrawFront(dc);
 
         if (_sleep > 0.6)
         {
@@ -222,6 +228,30 @@ public class CharacterControl : FrameworkElement
                 dc.DrawLine(_pen, new Point(50, 20), new Point(50, 8));
                 dc.DrawEllipse(new SolidColorBrush(C("#FF6B6B")), _pen, new Point(50, 7), 3.5, 3.5);
                 dc.DrawGeometry(_body, _pen, Poly(true, (14, 30), (86, 30), (86, 88), (14, 88)));
+                return;
+            case "Reindeer":
+                {
+                    var antler = new Pen(_ink, 3.4) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+                    foreach (var s in new[] { -1, 1 })
+                    {
+                        double X(double x) => 50 + s * x;
+                        dc.DrawLine(antler, new Point(X(20), 36), new Point(X(30), 10));
+                        dc.DrawLine(antler, new Point(X(30), 10), new Point(X(22), 4));
+                        dc.DrawLine(antler, new Point(X(26), 22), new Point(X(38), 18));
+                        dc.DrawGeometry(_body, _pen, Poly(true, (50 + s * 33, 46), (50 + s * 47, 32), (50 + s * 24, 34)));
+                    }
+                    break;
+                }
+            case "Gingerbread":
+                dc.DrawGeometry(_body, _pen, Wobble(50, 58, 36, 31));
+                dc.DrawEllipse(null, new Pen(Brushes.White, 2.2) { DashStyle = new DashStyle(new double[] { 1.2, 1.8 }, 0), StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round },
+                    new Point(50, 58), 31, 26);
+                return;
+            case "Santa":
+                dc.DrawGeometry(_body, _pen, Wobble(50, 58, 36, 31));
+                dc.DrawGeometry(Brushes.White, _pen, Wobble(50, 83, 30, 15, 18, 0.7));
+                dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(90, 255, 90, 120)), null, new Point(26, 62), 6, 4);
+                dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(90, 255, 90, 120)), null, new Point(74, 62), 6, 4);
                 return;
             case "Slime":
                 {
@@ -264,6 +294,41 @@ public class CharacterControl : FrameworkElement
         dc.DrawGeometry(_body, _pen, Wobble(50, 58, 36, 31));
         dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(90, 255, 90, 120)), null, new Point(26, 66), 6, 4);
         dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(90, 255, 90, 120)), null, new Point(74, 66), 6, 4);
+    }
+
+    // детали поверх лица: шапки, носы, шарфы
+    void DrawFront(DrawingContext dc)
+    {
+        var red = new SolidColorBrush(Color.FromRgb(229, 57, 59));
+        switch (Kind)
+        {
+            case "Snowman":
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(255, 138, 43)), _thin, Poly(true, (45, 60), (66, 63), (45, 66)));
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(43, 47, 58)), _pen, Poly(true, (32, 30), (36, 6), (64, 6), (68, 30)));
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(217, 75, 75)), null, Poly(true, (33.5, 24), (66.5, 24), (66.8, 18), (33.2, 18)));
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(43, 47, 58)), _pen, Poly(true, (24, 31), (76, 31), (76, 36), (24, 36)));
+                dc.DrawGeometry(red, _pen, Poly(true, (22, 82), (78, 82), (76, 92), (24, 92)));
+                dc.DrawGeometry(red, _pen, Poly(true, (60, 90), (73, 90), (71, 100), (58, 100)));
+                break;
+            case "Santa":
+                dc.DrawGeometry(red, _pen, Poly(true, (18, 40), (30, 14), (58, 4), (80, 26), (84, 40)));
+                dc.DrawGeometry(Brushes.White, _pen, Poly(true, (14, 36), (86, 36), (86, 46), (14, 46)));
+                dc.DrawEllipse(Brushes.White, _pen, new Point(60, 5), 7, 7);
+                break;
+            case "Bullfinch":
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(42, 42, 51)), _pen, Poly(true, (16, 44), (24, 28), (50, 21), (76, 28), (84, 44), (70, 40), (50, 37), (30, 40)));
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(42, 42, 51)), _thin, Poly(true, (44, 59), (56, 59), (50, 67)));
+                break;
+            case "Gingerbread":
+                dc.DrawGeometry(red, _thin, Poly(true, (50, 88), (35, 80), (35, 96)));
+                dc.DrawGeometry(red, _thin, Poly(true, (50, 88), (65, 80), (65, 96)));
+                dc.DrawEllipse(Brushes.White, _thin, new Point(50, 88), 3.2, 3.2);
+                break;
+            case "Reindeer":
+                dc.DrawEllipse(red, _thin, new Point(50, 63), 6, 5);
+                dc.DrawEllipse(Brushes.White, null, new Point(48.5, 61.5), 1.4, 1.2);
+                break;
+        }
     }
 
     // Claude: оранжевая «искра» — лучи волной вытягиваются и втягиваются

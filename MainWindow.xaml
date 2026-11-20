@@ -1,6 +1,7 @@
 <Window x:Class="Ostrovok.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:Ostrovok.Views"
         Title="Островок" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
         SizeToContent="Manual" Width="640" Height="360"
@@ -32,6 +33,9 @@
                 </DockPanel>
                 <Grid x:Name="Host"/>
             </DockPanel>
+            <!-- Праздник: гирлянда и сугроб поверх содержимого -->
+            <v:Garland x:Name="Garland" Visibility="Collapsed"/>
+            <v:SnowCap x:Name="SnowCap" Visibility="Collapsed"/>
         </Grid>
     </Border>
 </Window>

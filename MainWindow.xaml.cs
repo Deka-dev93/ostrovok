@@ -108,6 +108,8 @@ public partial class MainWindow : Window
         Hub.Mail.Changed += () => Dispatcher.BeginInvoke(UpdateBadges);
         Hub.Telegram.Changed += () => Dispatcher.BeginInvoke(UpdateBadges);
         Hub.Mail.Start();
+        Holiday.Changed += ApplyHoliday;
+        Holiday.Start();
         Hub.Headphones.Start();
         if (Hub.S.TelegramPreload) TelegramWindow.Preload();
         RefreshCompact();
@@ -179,6 +181,8 @@ public partial class MainWindow : Window
         double r = Math.Clamp(Pill.Height / 2, 10, 28);
         Pill.CornerRadius = Hub.S.EdgeMode ? new CornerRadius(0, 0, r, r) : new CornerRadius(r);
         Sheen.CornerRadius = Pill.CornerRadius;
+        Garland.SetRadii(Pill.CornerRadius.TopLeft, Pill.CornerRadius.BottomLeft);
+        SnowCap.SetRadii(Pill.CornerRadius.TopLeft, Pill.CornerRadius.BottomLeft);
     }
 
     void SetOpen(bool open)
@@ -294,6 +298,7 @@ public partial class MainWindow : Window
         _rightText.Foreground = (Brush)Application.Current.Resources["Fg"];
         _charC.Dancing = Hub.Media.IsPlaying;
         _charE.Dancing = Hub.Media.IsPlaying;
+        Garland.Music = Hub.Media.IsPlaying;
         _charC.Thinking = _charE.Thinking = ChatBusy;
         if (!_open) { var (w2, h2) = CompactSize(); _w.Target = w2; _h.Target = h2; }
     }
@@ -355,7 +360,7 @@ public partial class MainWindow : Window
         if (_tick % 10 == 0)
         {
             bool fs = Hub.S.HideInFullscreen && Native.IsFullscreenAppRunning();
-            if (fs != _busyFullscreen) { _busyFullscreen = fs; UpdateY(); }
+            if (fs != _busyFullscreen) { _busyFullscreen = fs; Holiday.Suspended = fs; Holiday.Apply(); UpdateY(); }
             if (_notice != null && DateTime.Now >= _noticeUntil) { _notice = null; RefreshCompact(); }
         }
     }
@@ -462,9 +467,19 @@ public partial class MainWindow : Window
         if (_open) ShowTab(_tabIndex);
     }
 
+    /// <summary>Применяет праздничные настройки: гирлянда, сугроб, праздничный персонаж.</summary>
+    public void ApplyHoliday()
+    {
+        bool on = Holiday.Active;
+        Garland.Mode = Hub.S.HolidayGarland;
+        Garland.Visibility = on && Hub.S.HolidayGarland != "Off" ? Visibility.Visible : Visibility.Collapsed;
+        SnowCap.Visibility = on && Hub.S.HolidaySnowCap ? Visibility.Visible : Visibility.Collapsed;
+        ApplyCharacter();
+    }
+
     public void ApplyCharacter()
     {
-        _charC.Kind = _charE.Kind = Hub.S.Character;
+        _charC.Kind = _charE.Kind = Holiday.EffectiveCharacter;
         CompactChar.Visibility = Hub.S.ShowCharacter ? Visibility.Visible : Visibility.Collapsed;
         ExpChar.Visibility = Hub.S.ShowCharacter ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -491,6 +506,7 @@ public partial class MainWindow : Window
         _all.Add(("📝", "Заметки", () => new NotesTab()));
         _all.Add(("📅", "Календарь", () => new CalendarTab()));
         _all.Add(("🖥", "Система", () => new SystemTab()));
+        _all.Add(("🎄", "Праздники", () => new HolidayTab()));
         _all.Add(("🧩", "Вкладки", () => new CustomizeTab(this)));
         _all.Add(("⚙️", "Настройки", () => new SettingsTab(this)));
         ApplyTabs();

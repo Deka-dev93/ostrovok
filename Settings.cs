@@ -15,6 +15,12 @@ public class AppSettings
     public string Accent { get; set; } = "#7C5CFF";
     public bool DarkTheme { get; set; } = true;
     public bool Glass { get; set; } = false;
+    public string HolidayMode { get; set; } = "always";      // date | always | off
+    public bool HolidaySnowScreen { get; set; } = true;
+    public bool HolidaySnowCap { get; set; } = true;
+    public string HolidayGarland { get; set; } = "Blink";    // Off | Blink | Wave | Music
+    public int SnowAmount { get; set; } = 100;
+    public string HolidayChar { get; set; } = "Snowman";
     public List<string> HiddenTabs { get; set; } = new();
     public List<string> TabOrder { get; set; } = new();
     public bool ShowWeatherInPill { get; set; } = true;
