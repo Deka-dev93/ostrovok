@@ -63,21 +63,88 @@ public class ShelfService
         return p;
     }
 
-    static string LocalIp()
+    /// <summary>Другие адреса этого ПК в локальных сетях (если QR ведёт не туда — их можно ввести на телефоне вручную).</summary>
+    public List<string> OtherIps { get; private set; } = new();
+
+    static bool IsPrivate(IPAddress a)
     {
+        var b = a.GetAddressBytes();
+        return b[0] == 10 || (b[0] == 192 && b[1] == 168) || (b[0] == 172 && b[1] >= 16 && b[1] <= 31);
+    }
+
+    /// <summary>
+    /// Выбирает адрес ПК в домашней сети. Раньше брался первый адаптер со шлюзом — часто это был VPN,
+    /// виртуальный адаптер (Hyper-V, WSL, VirtualBox) и т.п., и телефон по такой ссылке не открывал ничего.
+    /// </summary>
+    List<string> LocalIps()
+    {
+        var found = new List<(string ip, int score)>();
         try
         {
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel) continue;
-                var ip = ni.GetIPProperties();
-                if (!ip.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any))) continue;
-                var u = ip.UnicastAddresses.FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork);
-                if (u != null) return u.Address.ToString();
+                var label = (ni.Name + " " + ni.Description).ToLowerInvariant();
+                bool virt = new[] { "vethernet", "virtual", "vmware", "vbox", "hyper-v", "wsl", "tap-", "tap ", "wintun", "wireguard", "vpn", "tailscale", "zerotier", "bluetooth", "npcap", "loopback", "docker", "radmin", "hamachi" }
+                            .Any(label.Contains);
+                var props = ni.GetIPProperties();
+                bool gw = props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any));
+                foreach (var u in props.UnicastAddresses)
+                {
+                    if (u.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                    var s = u.Address.ToString();
+                    if (s.StartsWith("169.254.") || s.StartsWith("127.")) continue;      // APIPA / loopback — телефон не достанет
+                    int score = 0;
+                    if (IsPrivate(u.Address)) score += 40;
+                    if (s.StartsWith("192.168.")) score += 10;
+                    if (gw) score += 30;
+                    if (!virt) score += 50;
+                    if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211) score += 8;
+                    else if (ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet) score += 5;
+                    found.Add((s, score));
+                }
             }
         }
         catch { }
-        return "127.0.0.1";
+        return found.OrderByDescending(x => x.score).Select(x => x.ip).Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Открывает входящий порт в брандмауэре Windows для этой программы. Без этого телефон «не видит» ПК:
+    /// Windows молча блокирует подключения, особенно если окно с вопросом закрыли или сеть названа «Общедоступной».
+    /// Нужны права администратора — Windows один раз покажет запрос (UAC), нужно нажать «Да».
+    /// </summary>
+    public bool FirewallAsked { get; private set; }
+    public string FirewallNote { get; private set; } = "";
+
+    async Task EnsureFirewallAsync()
+    {
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exe) || string.Equals(Hub.S.FirewallPath, exe, StringComparison.OrdinalIgnoreCase)) return;
+        FirewallNote = "";
+        try
+        {
+            FirewallAsked = true;
+            // сначала удаляем все старые правила для этой программы (в том числе автоматические «Блокировать» от закрытого окна Windows),
+            // потом добавляем разрешающее правило для любых сетей
+            var args = "/c netsh advfirewall firewall delete rule name=all dir=in program=\"" + exe + "\" & " +
+                       "netsh advfirewall firewall add rule name=\"Ostrovok Shelf\" dir=in action=allow program=\"" + exe + "\" enable=yes profile=any protocol=TCP";
+            var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", args) { Verb = "runas", UseShellExecute = true, WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden };
+            int code = await Task.Run(() =>
+            {
+                using var p = System.Diagnostics.Process.Start(psi);
+                if (p == null) return -1;
+                p.WaitForExit(30000);
+                return p.HasExited ? p.ExitCode : -2;
+            });
+            if (code == 0) { Hub.S.FirewallPath = exe; Hub.S.Save(); }
+            else FirewallNote = "Не удалось открыть доступ в брандмауэре Windows (код " + code + ").";
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            FirewallNote = "Вы отклонили запрос Windows — телефон не сможет подключиться. Выключите и снова включите полку и нажмите «Да».";
+        }
+        catch (Exception ex) { FirewallNote = "Брандмауэр: " + ex.Message; AppSettings.Log("shelf firewall: " + ex); }
     }
 
     public async Task StartAsync()
@@ -110,8 +177,13 @@ public class ShelfService
                 }
             }
             _app = app;
-            Url = $"http://{LocalIp()}:{s.ShelfPort}/{s.ShelfToken}/";
+            var ips = LocalIps();
+            if (ips.Count == 0) ips.Add("127.0.0.1");
+            OtherIps = ips.Skip(1).Select(i => $"http://{i}:{s.ShelfPort}/{s.ShelfToken}/").ToList();
+            Url = $"http://{ips[0]}:{s.ShelfPort}/{s.ShelfToken}/";
             s.Save();
+            Changed?.Invoke();                    // QR уже можно показать
+            await EnsureFirewallAsync();          // а теперь — один раз просим Windows открыть доступ телефону
         }
         catch (Exception ex) { Error = ex.Message; AppSettings.Log("shelf start: " + ex); _app = null; }
         Changed?.Invoke();

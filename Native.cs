@@ -52,6 +52,22 @@ static partial class Native
         keybd_event(vk, 0, 2, UIntPtr.Zero);
     }
 
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
+
+    /// <summary>Тёмный/светлый заголовок окна и цвет его полосы под фон окна (Windows 10 2004+ / 11).</summary>
+    public static void StyleTitleBar(IntPtr hwnd, bool dark, int captionBgr)
+    {
+        try
+        {
+            int v = dark ? 1 : 0;
+            DwmSetWindowAttribute(hwnd, 20, ref v, 4);          // DWMWA_USE_IMMERSIVE_DARK_MODE
+            DwmSetWindowAttribute(hwnd, 19, ref v, 4);
+            int c = captionBgr;
+            DwmSetWindowAttribute(hwnd, 35, ref c, 4);          // DWMWA_CAPTION_COLOR (Windows 11)
+        }
+        catch { }
+    }
+
     public static void HideFromAltTab(IntPtr hwnd)
     {
         int ex = GetWindowLong(hwnd, GWL_EXSTYLE);

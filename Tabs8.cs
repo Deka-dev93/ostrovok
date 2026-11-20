@@ -88,13 +88,17 @@ public class ShelfTab : TabPage
     public override void Tick()
     {
         var sh = Hub.Shelf;
-        string k = sh.Url + "|" + sh.Running + "|" + sh.Error + "|" + string.Join("|", sh.Files());
+        string k = sh.Url + "|" + sh.Running + "|" + sh.Error + "|" + sh.FirewallNote + "|" + string.Join(",", sh.OtherIps) + "|" + string.Join("|", sh.Files());
         if (!_dirty && k == _key) return;
         _dirty = false; _key = k;
 
         _state.Text = sh.Running ? "● Включено" : (sh.Error.Length > 0 ? "Ошибка: " + sh.Error : "○ Выключено");
         _toggle.Content = sh.Running ? "Выключить" : "Включить";
-        _url.Text = sh.Running ? sh.Url : "Включите — появится QR-код. Windows может спросить про доступ к сети: разрешите для домашней сети.";
+        _url.Text = sh.Running
+            ? sh.Url + "\nТелефон и ПК должны быть в одной Wi-Fi сети (не гостевой, без VPN)."
+              + (sh.OtherIps.Count > 0 ? "\nЕсли не открывается, введите в браузере телефона один из адресов:\n" + string.Join("\n", sh.OtherIps) : "")
+              + (sh.FirewallNote.Length > 0 ? "\n⚠ " + sh.FirewallNote : "")
+            : "Включите — появится QR-код. Windows один раз спросит разрешение (запрос администратора) — нажмите «Да», иначе телефон не подключится.";
         _qr.Source = sh.Running ? MakeQr(sh.Url) : null;
         _qr.Visibility = sh.Running ? Visibility.Visible : Visibility.Collapsed;
 

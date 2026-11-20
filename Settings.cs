@@ -18,6 +18,7 @@ public class AppSettings
     public bool ShelfOn { get; set; } = false;
     public int ShelfPort { get; set; } = 0;
     public string ShelfToken { get; set; } = "";
+    public string FirewallPath { get; set; } = "";        // exe, для которого уже открыт доступ в брандмауэре
     public bool ShowDownloads { get; set; } = true;
     public List<string> Dock { get; set; } = new() { "explorer.exe", "notepad.exe", "calc.exe", "mspaint.exe", "powershell.exe", "taskmgr.exe" };
     public string HolidayMode { get; set; } = "always";      // date | always | off

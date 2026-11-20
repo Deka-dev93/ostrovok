@@ -264,7 +264,7 @@ public class SettingsTab : TabPage
 
     internal static CheckBox Check(string text, Func<bool> get, Action<bool> set)
     {
-        var c = new CheckBox { IsChecked = get(), Margin = new Thickness(0, 3, 0, 3), Cursor = Cursors.Hand };
+        var c = new CheckBox { IsChecked = get(), Style = (Style)Application.Current.FindResource("Switch") };
         c.Content = UI.Text(text, 12.5);
         c.Checked += (_, _) => { set(true); Hub.S.Save(); };
         c.Unchecked += (_, _) => { set(false); Hub.S.Save(); };

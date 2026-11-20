@@ -70,7 +70,14 @@ public static class Theme
         }
         var a = new SolidColorBrush(AccentColor); a.Freeze();
         r["Accent"] = a;
+        // фон окна настроек и боковой панели — меняется вместе с темой (раньше был жёстко задан и текст «пропадал»)
+        r["WinBg"] = B(dark ? "#FF0C0C0F" : "#FFF3F4F8");
+        r["SideBg"] = B(dark ? "#FF121216" : "#FFE9EBF2");
+        Applied?.Invoke();
     }
+
+    /// <summary>Тема применена (смена цвета, тёмная/светлая, стекло).</summary>
+    public static event Action Applied;
 }
 
 /// <summary>Мелкие фабрики элементов, чтобы вкладки в коде оставались короткими.</summary>
