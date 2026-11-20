@@ -41,12 +41,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         AllowDrop = true;
-        DragEnter += (_, e) =>
-        {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-            int si = _tabs.FindIndex(t => t.name == "Полка");
-            if (!_open && si >= 0) OpenIsland(si);
-        };
+        DragEnter += (_, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) EnterDrop(); };
+        PreviewDragOver += (_, _) => _dragSeen = DateTime.Now;
         Drop += (_, e) =>
         {
             if (e.Data.GetData(DataFormats.FileDrop) is not string[] fs) return;
@@ -515,6 +511,103 @@ public partial class MainWindow : Window
     readonly List<(string icon, string name, Func<TabPage> make)> _all = new();
     static readonly string[] Pinned = { "Вкладки", "Настройки" };
     static readonly string[] InSettings = { "Вкладки", "Настройки", "Праздники" };
+    // ───────── зоны сброса файлов ─────────
+    Border _dropUi; DateTime _dragSeen; System.Windows.Threading.DispatcherTimer _dragTimer; bool _dropMode;
+
+    void BuildDropUi()
+    {
+        var uni = new System.Windows.Controls.Primitives.UniformGrid { Columns = 4, Margin = new Thickness(10) };
+        void Zone(string glyph, string title, string sub, Action<string[]> act)
+        {
+            var sp = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+            var ic = new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = 22, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
+            ic.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+            var t = new TextBlock { Text = title, FontSize = 12.5, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center };
+            t.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+            var s2 = new TextBlock { Text = sub, FontSize = 10, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, MaxWidth = 100, Margin = new Thickness(0, 3, 0, 0) };
+            s2.SetResourceReference(TextBlock.ForegroundProperty, "FgDim");
+            sp.Children.Add(ic); sp.Children.Add(t); sp.Children.Add(s2);
+            var rect = new System.Windows.Shapes.Rectangle { RadiusX = 14, RadiusY = 14, StrokeThickness = 1.4, StrokeDashArray = new DoubleCollection { 3, 3 }, Opacity = 0.5 };
+            rect.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "FgDim");
+            var g = new Grid { Margin = new Thickness(4), AllowDrop = true, Background = Brushes.Transparent };
+            var fill = new Border { CornerRadius = new CornerRadius(14), Opacity = 0 };
+            fill.SetResourceReference(Border.BackgroundProperty, "Accent");
+            g.Children.Add(fill); g.Children.Add(rect); g.Children.Add(sp);
+            g.DragEnter += (_, _) => { fill.Opacity = 0.28; rect.Opacity = 1; };
+            g.DragLeave += (_, _) => { fill.Opacity = 0; rect.Opacity = 0.5; };
+            g.Drop += (_, e) =>
+            {
+                e.Handled = true;
+                if (e.Data.GetData(DataFormats.FileDrop) is string[] fs) act(fs);
+                ExitDrop();
+            };
+            uni.Children.Add(g);
+        }
+        Zone("\uE8B7", "На полку", "положит, пока не понадобится", fs =>
+        {
+            int n = 0; foreach (var f in fs) if (System.IO.File.Exists(f) && Hub.Shelf.Add(f) != null) n++;
+            if (n > 0) Hub.Notices.Push("Полка", "🗄 На полке", n == 1 ? System.IO.Path.GetFileName(fs[0]) : $"{n} файлов");
+        });
+        Zone("\uE71D", "В лаунчер", "яркий значок в доке на «Главной»", fs =>
+        {
+            int n = 0;
+            foreach (var f in fs) if (!Hub.S.Dock.Contains(f)) { Hub.S.Dock.Add(f); n++; }
+            Hub.S.Save();
+            Hub.Notices.Push("Лаунчер", "➕ В доке", n == 1 ? System.IO.Path.GetFileName(fs[0]) : $"{n} элементов");
+        });
+        Zone("\uE8BD", "В чат", "текст файла — в буфер, вставьте в чат", fs =>
+        {
+            try
+            {
+                var f = fs[0]; string txt = f;
+                var ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
+                if (System.IO.File.Exists(f) && new System.IO.FileInfo(f).Length < 200_000 && ext is ".txt" or ".md" or ".cs" or ".py" or ".js" or ".json" or ".csv" or ".log" or ".html" or ".xml" or ".css" or ".ts")
+                    txt = System.IO.File.ReadAllText(f);
+                Clipboard.SetText(txt);
+                ChatWindow.ShowChat(Hub.S.ChatProvider);
+                Hub.Notices.Push("Чат", "💬 Скопировано", "Вставьте в чат (Ctrl+V)");
+            }
+            catch { }
+        });
+        Zone("\uE8EA", "На телефон", "появится на странице телефона", fs =>
+        {
+            int n = 0; foreach (var f in fs) if (System.IO.File.Exists(f) && Hub.Shelf.Add(f) != null) n++;
+            if (!Hub.Shelf.Running) { Hub.S.ShelfOn = true; Hub.S.Save(); _ = Hub.Shelf.StartAsync(); }
+            if (n > 0) Hub.Notices.Push("Полка", "📱 Для телефона", "Откройте «Полку» — там QR-код");
+        });
+        _dropUi = new Border { CornerRadius = new CornerRadius(26), Visibility = Visibility.Collapsed, Child = uni, Margin = new Thickness(0) };
+        _dropUi.SetResourceReference(Border.BackgroundProperty, "Bg");
+        ((Grid)Pill.Child).Children.Add(_dropUi);
+    }
+
+    void EnterDrop()
+    {
+        if (_dropUi == null) BuildDropUi();
+        _dragSeen = DateTime.Now;
+        if (_dropMode) return;
+        _dropMode = true;
+        _userHidden = false;
+        SetOpen(true);
+        _h.Target = 150;
+        _dropUi.Opacity = 0; _dropUi.Visibility = Visibility.Visible;
+        _dropUi.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
+        _dragTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _dragTimer.Tick -= DragWatch; _dragTimer.Tick += DragWatch; _dragTimer.Start();
+    }
+
+    void DragWatch(object s, EventArgs e)
+    {
+        if ((DateTime.Now - _dragSeen).TotalMilliseconds > 600) ExitDrop();
+    }
+
+    void ExitDrop()
+    {
+        if (!_dropMode) return;
+        _dropMode = false; _dragTimer?.Stop();
+        _dropUi.Visibility = Visibility.Collapsed;
+        _h.Target = ExpH;
+    }
+
     public TabPage MakePage(string name) => _all.First(t => t.name == name).make();
 
     static readonly Dictionary<string, string> Glyphs8 = new()

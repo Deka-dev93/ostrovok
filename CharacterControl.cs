@@ -12,7 +12,7 @@ public enum Mood { Normal, Love, Angry, Surprised, Sad, Dizzy, Laugh, Cool }
 /// </summary>
 public class CharacterControl : FrameworkElement
 {
-    public static readonly string[] Kinds = { "Fox", "Cat", "Bear", "Ghost", "Robot", "Spark", "Slime" };
+    public static readonly string[] Kinds = { "Fox", "Cat", "Bear", "Ghost", "Robot", "Spark", "Slime", "Frog" };
 
     string _kind = "Fox";
     public string Kind { get => _kind; set { if (_kind != value) { _kind = value; _palKind = null; } } }
@@ -107,6 +107,7 @@ public class CharacterControl : FrameworkElement
             "Robot" => (C("#8FD3FF"), C("#2F6E99")),
             "Spark" => (C("#E8825B"), C("#A8482A")),
             "Slime" => (C("#6EE7A8"), C("#1F7A55")),
+            "Frog" => (C("#86D95B"), C("#2B6B2A")),
             "Snowman" => (C("#F4F8FF"), C("#5E7096")),
             "Santa" => (C("#FFD3B3"), C("#8C3A2B")),
             "Bullfinch" => (C("#EE6A55"), C("#6B2218")),
@@ -229,6 +230,15 @@ public class CharacterControl : FrameworkElement
                 dc.DrawEllipse(new SolidColorBrush(C("#FF6B6B")), _pen, new Point(50, 7), 3.5, 3.5);
                 dc.DrawGeometry(_body, _pen, Poly(true, (14, 30), (86, 30), (86, 88), (14, 88)));
                 return;
+            case "Frog":
+                {
+                    var white = Brushes.White;
+                    foreach (var s in new[] { -1, 1 })
+                        dc.DrawEllipse(_body, _pen, new Point(50 + s * 22, 31), 15, 14);
+                    dc.DrawGeometry(_body, _pen, Wobble(50, 64, 40, 27));
+                    dc.DrawEllipse(white, null, new Point(28, 35), 0.01, 0.01);
+                    return;
+                }
             case "Reindeer":
                 {
                     var antler = new Pen(_ink, 3.4) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
@@ -324,6 +334,11 @@ public class CharacterControl : FrameworkElement
                 dc.DrawGeometry(red, _thin, Poly(true, (50, 88), (65, 80), (65, 96)));
                 dc.DrawEllipse(Brushes.White, _thin, new Point(50, 88), 3.2, 3.2);
                 break;
+            case "Frog":
+                dc.DrawGeometry(null, _thin, Poly(false, (22, 68), (36, 76), (50, 78), (64, 76), (78, 68)));
+                dc.DrawEllipse(_ink, null, new Point(44, 60), 1.4, 1.4);
+                dc.DrawEllipse(_ink, null, new Point(56, 60), 1.4, 1.4);
+                break;
             case "Reindeer":
                 dc.DrawEllipse(red, _thin, new Point(50, 63), 6, 5);
                 dc.DrawEllipse(Brushes.White, null, new Point(48.5, 61.5), 1.4, 1.2);
@@ -348,8 +363,8 @@ public class CharacterControl : FrameworkElement
 
     void DrawFace(DrawingContext dc)
     {
-        double ey = Kind == "Spark" ? 53 : (Kind == "Robot" ? 55 : 54);
-        double ex = Kind == "Spark" ? 6 : 13;
+        double ey = Kind == "Spark" ? 53 : (Kind == "Robot" ? 55 : (Kind == "Frog" ? 37 : 54));
+        double ex = Kind == "Spark" ? 6 : (Kind == "Frog" ? 22 : 13);
         double lx = _lx * 3, ly = _ly * 2.2;
         Brush ink = _ink;
         Pen thin = _thin;
