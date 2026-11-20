@@ -4,7 +4,7 @@
         xmlns:v="clr-namespace:Ostrovok.Views"
         Title="Островок" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
-        SizeToContent="Manual" Width="640" Height="360"
+        SizeToContent="Manual" Width="640" Height="396"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display" FontFamily="Segoe UI Variable Text, Segoe UI">
     <Border x:Name="Pill" Width="230" Height="36" HorizontalAlignment="Center" VerticalAlignment="Top"
             Background="{DynamicResource Bg}" CornerRadius="18" ClipToBounds="True"
@@ -26,7 +26,7 @@
                 <ContentControl x:Name="CompactRight" Grid.Column="2" VerticalAlignment="Center"/>
             </Grid>
             <!-- Развёрнутый вид -->
-            <DockPanel x:Name="Expanded" Width="572" Height="318" Margin="0,10,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0" IsHitTestVisible="False">
+            <DockPanel x:Name="Expanded" Width="572" Height="352" Margin="0,10,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0" IsHitTestVisible="False">
                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                     <ContentControl x:Name="ExpChar" DockPanel.Dock="Right" Width="34" Height="34"/>
                     <StackPanel x:Name="BarRight" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0"/>

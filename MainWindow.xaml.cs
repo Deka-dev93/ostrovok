@@ -12,7 +12,7 @@ namespace Ostrovok;
 public partial class MainWindow : Window
 {
     // ── размеры ──
-    const double CompactW = 230, CompactH = 36, ExpW = 600, ExpH = 340;
+    const double CompactW = 230, CompactH = 36, ExpW = 600, ExpH = 374;
 
     readonly Spring _w = new(CompactW), _h = new(CompactH), _y = new(-60), _r = new(18);
     readonly CharacterControl _charC = new(), _charE = new();
@@ -165,7 +165,7 @@ public partial class MainWindow : Window
 
     // Окно ФИКСИРОВАННОГО размера (с запасом под раскрытый остров): меняется только размер пилюли внутри него.
     // Изменение размера окна с прозрачностью каждый кадр заставляет Windows пересоздавать поверхность — отсюда рывки.
-    const double WinW = 640, WinH = 360;
+    const double WinW = 640, WinH = 396;
 
     /// <summary>Двигает окно (не меняя размер) в целых физических пикселях — без дрожания при дробном масштабе.</summary>
     void ApplyBounds(double _w_unused = 0, double _h_unused = 0)

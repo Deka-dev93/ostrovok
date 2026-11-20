@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 
 namespace Ostrovok.Views;
@@ -15,7 +15,17 @@ public class CharacterControl : FrameworkElement
     public static readonly string[] Kinds = { "Fox", "Cat", "Bear", "Ghost", "Robot", "Spark", "Slime", "Frog" };
 
     string _kind = "Fox";
-    public string Kind { get => _kind; set { if (_kind != value) { _kind = value; _palKind = null; } } }
+    public string Kind
+    {
+        get => _kind;
+        set
+        {
+            if (_kind == value) return;
+            _kind = value; _palKind = null;
+            // пиксельный призрак рисуется без сглаживания — иначе пиксели «мылятся»
+            System.Windows.Media.RenderOptions.SetEdgeMode(this, value == "Ghost" ? EdgeMode.Aliased : EdgeMode.Unspecified);
+        }
+    }
     public bool Dancing { get; set; }
     public bool Sleeping { get; set; }
     public bool Thinking { get; set; }
@@ -95,19 +105,116 @@ public class CharacterControl : FrameworkElement
     // ───────── краски ─────────
     static Color C(string hex) => (Color)ColorConverter.ConvertFromString(hex);
 
+    // кэши кистей, перьев и неизменных форм (чтобы не создавать их на каждом кадре)
+    static readonly Dictionary<string, SolidColorBrush> Brushes_ = new();
+    static Brush Br(string hex)
+    {
+        if (!Brushes_.TryGetValue(hex, out var b)) { b = new SolidColorBrush(C(hex)); b.Freeze(); Brushes_[hex] = b; }
+        return b;
+    }
+    static readonly Dictionary<string, Pen> Pens_ = new();
+    static Pen Pn(string hex, double w)
+    {
+        var k = hex + "|" + w;
+        if (!Pens_.TryGetValue(k, out var p))
+        {
+            p = new Pen(Br(hex), w) { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            p.Freeze(); Pens_[k] = p;
+        }
+        return p;
+    }
+    static readonly Dictionary<string, Geometry> Shapes_ = new();
+    static Geometry Shape(string key, Func<Geometry> make)
+    {
+        if (!Shapes_.TryGetValue(key, out var g)) { g = make(); if (g.CanFreeze) g.Freeze(); Shapes_[key] = g; }
+        return g;
+    }
+    static readonly Dictionary<string, Brush> BrushShapes_ = new();
+    static Brush Shape_Brush(string key, Func<Brush> make)
+    {
+        if (!BrushShapes_.TryGetValue(key, out var b)) { b = make(); if (b.CanFreeze) b.Freeze(); BrushShapes_[key] = b; }
+        return b;
+    }
+    static EllipseGeometry El(double cx, double cy, double rx, double ry) => new(new Point(cx, cy), rx, ry);
+    static Geometry Union(params Geometry[] gs)
+    {
+        Geometry r = gs[0];
+        for (int i = 1; i < gs.Length; i++) r = Geometry.Combine(r, gs[i], GeometryCombineMode.Union, null);
+        return r;
+    }
+    static readonly Typeface SymbolFont = new("Segoe UI Symbol");
+
+    void Note(DrawingContext dc, string s, double x, double y, double size, string hex)
+    {
+        var ft = new FormattedText(s, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, SymbolFont, size, Br(hex),
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        dc.DrawText(ft, new Point(x, y));
+    }
+
+    // ── пиксельный призрак ──
+    const int GN = 32;
+    const double GS = 3.125;                 // клетка в единицах 100×100
+    static Geometry _gOutline, _gBody, _gShade, _gArm;
+
+    static void BuildGhost()
+    {
+        if (_gBody != null) return;
+        var inside = new bool[GN, GN];
+        for (int y = 0; y < GN; y++)
+            for (int x = 0; x < GN; x++)
+            {
+                double cx = x + 0.5, cy = y + 0.5;
+                bool dome = cy <= 13 && Math.Pow((cx - 17) / 9.5, 2) + Math.Pow((cy - 13) / 10.5, 2) <= 1;
+                double bottom = 25.5 + (((int)(cx / 3)) % 2 == 0 ? 2.5 : 0);
+                bool trunk = cy > 13 && cy <= bottom && cx >= 7.5 - (cy - 13) * 0.04 && cx <= 26.5 + (cy - 13) * 0.04;
+                
+                inside[x, y] = dome || trunk;
+            }
+        bool In(int x, int y) => x >= 0 && y >= 0 && x < GN && y < GN && inside[x, y];
+        bool Edge(int x, int y) => In(x, y) && (!In(x - 1, y) || !In(x + 1, y) || !In(x, y - 1) || !In(x, y + 1));
+        bool Arm(int x, int y)
+        {
+            for (int i = 0; i <= 14; i++) { if (x == 18 + i / 2 && y == 17 + i / 2) return In(x, y); }
+            return (x >= 24 && x <= 26 && y >= 24 && y <= 25) && In(x, y);
+        }
+        Geometry Make(Func<int, int, bool> p)
+        {
+            var g = new StreamGeometry();
+            using (var c = g.Open())
+                for (int y = 0; y < GN; y++)
+                {
+                    int x = 0;
+                    while (x < GN)
+                    {
+                        if (!p(x, y)) { x++; continue; }
+                        int x0 = x;
+                        while (x < GN && p(x, y)) x++;
+                        c.BeginFigure(new Point(x0, y), true, true);
+                        c.LineTo(new Point(x, y), false, false); c.LineTo(new Point(x, y + 1), false, false); c.LineTo(new Point(x0, y + 1), false, false);
+                    }
+                }
+            g.Freeze();
+            return g;
+        }
+        _gOutline = Make((x, y) => Edge(x, y));
+        _gBody = Make((x, y) => In(x, y) && !Edge(x, y));
+        _gShade = Make((x, y) => In(x, y) && !Edge(x, y) && (x + 0.5 >= 22.5 || y + 0.5 >= 24));
+        _gArm = Make((x, y) => false);
+    }
+
     void EnsurePalette()
     {
         if (_palKind == Kind) return;
         _palKind = Kind;
         var (body, dark) = Kind switch
         {
-            "Cat" => (C("#C9CED6"), C("#6B7280")),
-            "Bear" => (C("#C79A6B"), C("#6B4A2B")),
-            "Ghost" => (C("#F1F3FF"), C("#8E96C9")),
+            "Cat" => (C("#FFFFFF"), C("#1B1B1B")),
+            "Bear" => (C("#A97D66"), C("#4E2E22")),
+            "Ghost" => (C("#FFFFFF"), C("#17171B")),
             "Robot" => (C("#8FD3FF"), C("#2F6E99")),
             "Spark" => (C("#E8825B"), C("#A8482A")),
-            "Slime" => (C("#6EE7A8"), C("#1F7A55")),
-            "Frog" => (C("#86D95B"), C("#2B6B2A")),
+            "Slime" => (C("#7EDC68"), C("#1E5C2B")),
+            "Frog" => (C("#4DB848"), C("#173F20")),
             "Snowman" => (C("#F4F8FF"), C("#5E7096")),
             "Santa" => (C("#FFD3B3"), C("#8C3A2B")),
             "Bullfinch" => (C("#EE6A55"), C("#6B2218")),
@@ -218,13 +325,49 @@ public class CharacterControl : FrameworkElement
                 dc.DrawGeometry(Brushes.White, null, Poly(true, (30, 22), (26, 16), (38, 25)));
                 break;
             case "Cat":
-                dc.DrawGeometry(_body, _pen, Poly(true, (16, 46), (20, 10), (44, 28)));
-                dc.DrawGeometry(_body, _pen, Poly(true, (84, 46), (80, 10), (56, 28)));
-                break;
+                {
+                    // белый котик-«каракуля» в наушниках
+                    var shape = Shape("cat.body", () => Union(El(50, 50, 30, 23),
+                        Geometry.Parse("M 22,46 L 25,18 L 45,30 Z"), Geometry.Parse("M 78,46 L 75,18 L 55,30 Z"),
+                        El(50, 79, 17, 12), El(41, 91, 6.5, 3.8), El(59, 91, 6.5, 3.8)));
+                    dc.DrawGeometry(_body, Pn("#1B1B1B", 2.6), shape);
+                    var gray = Pn("#8F8F96", 1.9);
+                    dc.DrawLine(gray, new Point(44, 34), new Point(46.5, 41));
+                    dc.DrawLine(gray, new Point(49.5, 33), new Point(52, 40));
+                    dc.DrawLine(gray, new Point(55, 34), new Point(57.5, 41));
+                    dc.DrawLine(gray, new Point(52, 74), new Point(58, 81));           // серый крестик на животе
+                    dc.DrawLine(gray, new Point(58, 74), new Point(52, 81));
+                    dc.DrawLine(Pn("#1B1B1B", 2.4), new Point(66, 75), new Point(77, 68));   // лапка
+                    dc.DrawEllipse(_body, Pn("#1B1B1B", 2.2), new Point(78.5, 67), 2.8, 2.8);
+                    dc.DrawGeometry(null, Pn("#9A9AA2", 1.8), Shape("cat.cable", () => Geometry.Parse("M 33,64 Q 28,74 36,79")));
+                    return;
+                }
             case "Bear":
-                dc.DrawGeometry(_body, _pen, Wobble(22, 28, 11, 11, 14));
-                dc.DrawGeometry(_body, _pen, Wobble(78, 28, 11, 11, 14));
-                break;
+                {
+                    // мохнатый мишка: контур дрожит, поэтому шерсть «шевелится»
+                    string ink = "#4E2E22";
+                    var shapes = new Geometry[]
+                    {
+                        Wobble(33, 21, 9.5, 9.5, 18, 0.6), Wobble(67, 21, 9.5, 9.5, 18, 0.6),
+                        Wobble(31, 87, 9.5, 6.5, 16, 0.5), Wobble(67, 87, 9.5, 6.5, 16, 0.5),
+                        Wobble(23, 58, 8, 9, 18, 0.5), Wobble(77, 58, 8, 9, 18, 0.5),
+                        Wobble(50, 72, 27, 18, 32, 0.8),
+                        Wobble(50, 38, 26, 22, 36, 0.8),
+                    };
+                    foreach (var s in shapes) dc.DrawGeometry(null, Pn(ink, 5.4), s);
+                    foreach (var s in shapes) dc.DrawGeometry(_body, null, s);
+                    dc.DrawEllipse(Br("#8B5D4E"), null, new Point(33.5, 22.5), 5, 5);
+                    dc.DrawEllipse(Br("#8B5D4E"), null, new Point(66.5, 22.5), 5, 5);
+                    dc.DrawEllipse(Br("#E2B793"), null, new Point(50, 74), 17, 9.5);          // пузико
+                    dc.DrawEllipse(Br("#E2B793"), null, new Point(21.5, 60), 4.4, 4.8);       // подушечки лап
+                    dc.DrawEllipse(Br("#E2B793"), null, new Point(78.5, 60), 4.4, 4.8);
+                    dc.DrawEllipse(Br("#E2B793"), null, new Point(30, 89), 4.2, 3);
+                    dc.DrawEllipse(Br("#E2B793"), null, new Point(68, 89), 4.2, 3);
+                    dc.DrawEllipse(Br("#8F6252"), null, new Point(50, 46.5), 9.5, 6.4);       // мордочка
+                    dc.DrawEllipse(Br("#33201A"), null, new Point(50, 43.6), 3.4, 2.4);       // носик
+                    dc.DrawGeometry(null, Pn(ink, 1.5), Shape("bear.curl", () => Geometry.Parse("M 45,29.5 C 46.5,25.5 49,26 50,29 C 51,31.5 53.5,31 54.5,27.5")));
+                    return;
+                }
             case "Robot":
                 dc.DrawLine(_pen, new Point(50, 20), new Point(50, 8));
                 dc.DrawEllipse(new SolidColorBrush(C("#FF6B6B")), _pen, new Point(50, 7), 3.5, 3.5);
@@ -232,11 +375,12 @@ public class CharacterControl : FrameworkElement
                 return;
             case "Frog":
                 {
-                    var white = Brushes.White;
-                    foreach (var s in new[] { -1, 1 })
-                        dc.DrawEllipse(_body, _pen, new Point(50 + s * 22, 31), 15, 14);
-                    dc.DrawGeometry(_body, _pen, Wobble(50, 64, 40, 27));
-                    dc.DrawEllipse(white, null, new Point(28, 35), 0.01, 0.01);
+                    // пухлая лягушка с цветком: единый контур тела, светлое пузико, розовые щёчки
+                    var body = Shape("frog.body", () => Union(El(51, 52, 35, 31), El(30, 25, 14.5, 12), El(72, 25, 14.5, 12), El(42, 84, 8, 5.5), El(59, 84, 8, 5.5)));
+                    dc.DrawGeometry(_body, Pn("#173F20", 3.2), body);
+                    dc.DrawEllipse(Br("#A9D653"), null, new Point(51, 56), 27, 20);
+                    dc.DrawEllipse(Br("#D9F0909C"), null, new Point(26, 33), 6.5, 4.5);
+                    dc.DrawEllipse(Br("#D9F0909C"), null, new Point(76, 32), 6.5, 4.5);
                     return;
                 }
             case "Reindeer":
@@ -265,39 +409,67 @@ public class CharacterControl : FrameworkElement
                 return;
             case "Slime":
                 {
-                    double sq = Math.Sin(_time * 3) * 2.2;
+                    // глянцевый слайм: полупрозрачный градиент, светящиеся глаза, капли и лужица
+                    double sq = Math.Sin(_time * 3) * 2;
                     var g = new StreamGeometry();
                     using (var c = g.Open())
                     {
-                        c.BeginFigure(new Point(12, 88), true, true);
-                        c.BezierTo(new Point(4, 60 - sq), new Point(26, 24 + sq), new Point(50, 24 + sq), true, true);
-                        c.BezierTo(new Point(74, 24 + sq), new Point(96, 60 - sq), new Point(88, 88), true, true);
-                        c.BezierTo(new Point(70, 93 + sq * 0.5), new Point(30, 93 + sq * 0.5), new Point(12, 88), true, true);
+                        c.BeginFigure(new Point(6, 88), true, true);
+                        c.BezierTo(new Point(6, 70), new Point(18, 55), new Point(30, 38 + sq), true, true);
+                        c.BezierTo(new Point(33, 32 + sq), new Point(33, 26 + sq), new Point(36, 19 + sq), true, true);
+                        c.BezierTo(new Point(40, 24 + sq), new Point(46, 26 + sq), new Point(52, 26 + sq), true, true);
+                        c.BezierTo(new Point(80, 26 + sq), new Point(94, 50), new Point(94, 70), true, true);
+                        c.BezierTo(new Point(94, 82), new Point(90, 90), new Point(82, 90), true, true);
+                        c.BezierTo(new Point(70, 96 + sq * 0.4), new Point(30, 96 + sq * 0.4), new Point(18, 92), true, true);
+                        c.BezierTo(new Point(12, 91), new Point(6, 90), new Point(6, 88), true, true);
                     }
                     g.Freeze();
-                    dc.DrawGeometry(_body, _pen, g);
-                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(130, 255, 255, 255)), null, new Point(31, 42 + sq), 6.5, 3.5);
-                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(70, 255, 90, 120)), null, new Point(24, 68), 6, 4);
-                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(70, 255, 90, 120)), null, new Point(76, 68), 6, 4);
+                    var jelly = (Brush)Shape_Brush("slime.jelly", () =>
+                    {
+                        var rb = new RadialGradientBrush { Center = new Point(0.38, 0.32), GradientOrigin = new Point(0.3, 0.25), RadiusX = 0.85, RadiusY = 0.85 };
+                        rb.GradientStops.Add(new GradientStop(C("#C8F59B"), 0)); rb.GradientStops.Add(new GradientStop(C("#86DF6C"), 0.45)); rb.GradientStops.Add(new GradientStop(C("#3DA13F"), 1));
+                        return rb;
+                    });
+                    dc.DrawEllipse(Br("#7F6FCF5C"), Pn("#1E5C2B", 1.2), new Point(7, 96.5), 5, 2);                  // лужица
+                    dc.DrawGeometry(jelly, Pn("#1E5C2B", 1.8), g);
+                    dc.DrawEllipse(Br("#26FFFFFF"), null, new Point(56, 76), 26, 12);                                 // свет внутри
+                    dc.DrawGeometry(Br("#9AB8F08A"), Pn("#2F8A3A", 0.9), Shape("slime.drip1", () => Geometry.Parse("M 20,50 C 17,57 17,63 20,65 C 23,63 23,57 20,50 Z")));
+                    dc.DrawGeometry(Br("#9AB8F08A"), Pn("#2F8A3A", 0.9), Shape("slime.drip2", () => Geometry.Parse("M 28,66 C 25.5,75 25.5,82 29,84 C 32.5,82 32.5,75 30,66 Z")));
+                    dc.PushTransform(new RotateTransform(-35, 24, 44 + sq));
+                    dc.DrawEllipse(Br("#99FFFFFF"), null, new Point(24, 44 + sq), 9, 4.2);                            // глянцевый блик
+                    dc.Pop();
+                    dc.DrawEllipse(Br("#99FFFFFF"), null, new Point(15, 60), 2, 2);
                     return;
                 }
             case "Ghost":
                 {
-                    var g = new StreamGeometry();
-                    using (var c = g.Open())
+                    BuildGhost();
+                    dc.PushTransform(new TranslateTransform(3, 0));
+                    dc.PushTransform(new ScaleTransform(GS, GS));
+                    dc.DrawGeometry(Br("#6E6E78"), null, _gOutline);
+                    dc.DrawGeometry(Brushes.White, null, _gBody);
+                    dc.DrawGeometry(Br("#D4D4DC"), null, _gShade);
+                    
+                    if (_mood == Mood.Normal)
                     {
-                        c.BeginFigure(new Point(14, 90), true, true);
-                        c.LineTo(new Point(14, 52), true, true);
-                        c.ArcTo(new Point(86, 52), new Size(36, 38), 0, false, SweepDirection.Clockwise, true, true);
-                        c.LineTo(new Point(86, 90), true, true);
-                        // «рваный» подол колышется
-                        double w = Math.Sin(_time * 3) * 1.5;
-                        for (int i = 0; i < 4; i++)
-                            c.ArcTo(new Point(86 - (i + 1) * 18, 90), new Size(9, 7 + w * (i % 2 == 0 ? 1 : -1)), 0, false,
-                                i % 2 == 0 ? SweepDirection.Counterclockwise : SweepDirection.Clockwise, true, true);
+                        // пиксельные грустные глазки с «треугольным» взглядом; следят за курсором, моргают
+                        int dx = (int)Math.Round(_lx), dy = (int)Math.Round(_ly * 0.8);
+                        double blink = _blinkT >= 0 ? Math.Sin(Math.PI * _blinkT / 0.16) : 0;
+                        bool shut = Math.Max(blink, _sleep) > 0.5;
+                        var k = Br("#17171B");
+                        void Px(int x, int y) => dc.DrawRectangle(k, null, new Rect(x + dx, y + dy, 1, 1));
+                        if (shut)
+                        {
+                            for (int i = 0; i < 3; i++) { Px(11 + i, 12); Px(19 + i, 12); }
+                        }
+                        else
+                        {
+                            foreach (var (x, y) in new[] { (2, 0), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2) }) Px(11 + x, 10 + y);
+                            foreach (var (x, y) in new[] { (0, 0), (1, 1), (0, 1), (2, 2), (1, 2), (0, 2) }) Px(19 + x, 10 + y);
+                        }
+                        Px(15, 15); Px(16, 15);
                     }
-                    g.Freeze();
-                    dc.DrawGeometry(_body, _pen, g);
+                    dc.Pop(); dc.Pop();
                     return;
                 }
         }
@@ -335,10 +507,40 @@ public class CharacterControl : FrameworkElement
                 dc.DrawEllipse(Brushes.White, _thin, new Point(50, 88), 3.2, 3.2);
                 break;
             case "Frog":
-                dc.DrawGeometry(null, _thin, Poly(false, (22, 68), (36, 76), (50, 78), (64, 76), (78, 68)));
-                dc.DrawEllipse(_ink, null, new Point(44, 60), 1.4, 1.4);
-                dc.DrawEllipse(_ink, null, new Point(56, 60), 1.4, 1.4);
-                break;
+                {
+                    // лягушка обнимает цветок: стебель, листик, лапки и лепестки
+                    double sw = Math.Sin(_time * 2.2) * 1.6;
+                    string ink = "#173F20";
+                    dc.DrawGeometry(null, Pn("#2E7D3B", 2.8), Shape("frog.stem", () => Geometry.Parse("M 57,61 Q 55,70 49,78")));
+                    dc.DrawGeometry(Br("#7BC47A"), Pn(ink, 1.6), Shape("frog.leaf", () => Geometry.Parse("M 53,69 C 42,67 38,56 42,49 C 50,53 56,60 53,69 Z")));
+                    dc.PushTransform(new TranslateTransform(sw * 0.5, 0));
+                    dc.DrawGeometry(Brushes.White, Pn(ink, 2.1), Shape("frog.flower", () =>
+                    {
+                        var parts = new List<Geometry> { El(58, 51, 5.5, 5.5) };
+                        for (int i = 0; i < 5; i++)
+                        {
+                            double a = (-90 + i * 72) * Math.PI / 180;
+                            parts.Add(El(58 + Math.Cos(a) * 7, 51 + Math.Sin(a) * 7, 6.2, 6.2));
+                        }
+                        return Union(parts.ToArray());
+                    }));
+                    dc.DrawEllipse(Br("#F6D44B"), Pn(ink, 1.1), new Point(58.5, 52), 2.8, 2.4);
+                    dc.Pop();
+                    dc.DrawGeometry(null, Pn(ink, 2.4), Shape("frog.armL", () => Geometry.Parse("M 31,67 Q 42,73 54,71")));
+                    dc.DrawGeometry(null, Pn(ink, 2.4), Shape("frog.armR", () => Geometry.Parse("M 74,67 Q 64,73 54,71")));
+                    break;
+                }
+            case "Cat":
+                {
+                    // наушники: дужка и чашки; рядом пляшут ноты
+                    dc.DrawGeometry(null, Pn("#1B1B1B", 4.8), Shape("cat.band", () => Geometry.Parse("M 19,50 A 31,33 0 0 1 81,50")));
+                    foreach (double x in new[] { 18.0, 82.0 })
+                        dc.DrawEllipse(Br("#1B1B1B"), Pn("#8A8A92", 1.3), new Point(x, 53), 6.5, 10.5);
+                    double nb = Math.Sin(_time * 3) * 2.5 * (1 + _dance);
+                    Note(dc, "♫", 0, 36 + nb, 15, "#8F8F96");
+                    Note(dc, "♪", 85, 18 - nb, 17, "#8F8F96");
+                    break;
+                }
             case "Reindeer":
                 dc.DrawEllipse(red, _thin, new Point(50, 63), 6, 5);
                 dc.DrawEllipse(Brushes.White, null, new Point(48.5, 61.5), 1.4, 1.2);
@@ -361,10 +563,25 @@ public class CharacterControl : FrameworkElement
         dc.DrawEllipse(_body, null, new Point(50, 55), 14, 14);
     }
 
+    struct Face { public double Cx, Ex, Ey, My, Er, Mw; public bool Glow, Arc; }
+
+    Face Spec() => Kind switch
+    {
+        "Spark" => new Face { Cx = 50, Ex = 6, Ey = 53, My = 64, Er = 4.6, Mw = 7 },
+        "Robot" => new Face { Cx = 50, Ex = 13, Ey = 55, My = 68, Er = 4.6, Mw = 7 },
+        "Frog" => new Face { Cx = 51, Ex = 21, Ey = 25.5, My = 31, Er = 5.2, Mw = 4.5 },
+        "Cat" => new Face { Cx = 50, Ex = 11, Ey = 52, My = 57, Er = 2.5, Mw = 4.5 },
+        "Bear" => new Face { Cx = 50, Ex = 8.5, Ey = 43, My = 51.5, Er = 2.7, Mw = 3.2 },
+        "Slime" => new Face { Cx = 66, Ex = 10, Ey = 44, My = 57, Er = 6.8, Mw = 5, Glow = true, Arc = true },
+        "Ghost" => new Face { Cx = 54.7, Ex = 12.5, Ey = 36, My = 47, Er = 3.4, Mw = 5 },
+        _ => new Face { Cx = 50, Ex = 13, Ey = 54, My = 68, Er = 4.6, Mw = 7 },
+    };
+
     void DrawFace(DrawingContext dc)
     {
-        double ey = Kind == "Spark" ? 53 : (Kind == "Robot" ? 55 : (Kind == "Frog" ? 37 : 54));
-        double ex = Kind == "Spark" ? 6 : (Kind == "Frog" ? 22 : 13);
+        if (Kind == "Ghost" && _mood == Mood.Normal) return;       // у пиксельного призрака лицо нарисовано вместе с телом
+        var f = Spec();
+        double cx = f.Cx, ex = f.Ex, ey = f.Ey;
         double lx = _lx * 3, ly = _ly * 2.2;
         Brush ink = _ink;
         Pen thin = _thin;
@@ -377,25 +594,25 @@ public class CharacterControl : FrameworkElement
         switch (_mood)
         {
             case Mood.Love:
-                foreach (var s in new[] { -1, 1 }) DrawHeart(dc, 50 + s * ex, ey, 7);
+                foreach (var s in new[] { -1, 1 }) DrawHeart(dc, cx + s * ex, ey, Math.Max(5, f.Er * 1.5));
                 break;
             case Mood.Laugh:
                 foreach (var s in new[] { -1, 1 })
-                    dc.DrawGeometry(null, thin, Poly(false, (50 + s * ex - 5, ey + 3), (50 + s * ex, ey - 3), (50 + s * ex + 5, ey + 3)));
+                    dc.DrawGeometry(null, thin, Poly(false, (cx + s * ex - 5, ey + 3), (cx + s * ex, ey - 3), (cx + s * ex + 5, ey + 3)));
                 break;
             case Mood.Cool:
-                dc.DrawGeometry(ink, null, Poly(true, (50 - ex - 9, ey - 5), (50 + ex + 9, ey - 5), (50 + ex + 7, ey + 5), (50 + ex - 2, ey + 5),
-                    (50, ey + 1), (50 - ex + 2, ey + 5), (50 - ex - 7, ey + 5)));
+                dc.DrawGeometry(ink, null, Poly(true, (cx - ex - 9, ey - 5), (cx + ex + 9, ey - 5), (cx + ex + 7, ey + 5), (cx + ex - 2, ey + 5),
+                    (cx, ey + 1), (cx - ex + 2, ey + 5), (cx - ex - 7, ey + 5)));
                 break;
             case Mood.Dizzy:
                 foreach (var s in new[] { -1, 1 })
                 {
-                    double cx = 50 + s * ex; double ang = _time * 10;
+                    double ecx = cx + s * ex; double ang = _time * 10;
                     var pts = new List<(double, double)>();
                     for (int i = 0; i < 14; i++)
                     {
                         double a = ang + i * 0.8; double r = 1 + i * 0.4;
-                        pts.Add((cx + Math.Cos(a) * r, ey + Math.Sin(a) * r));
+                        pts.Add((ecx + Math.Cos(a) * r, ey + Math.Sin(a) * r));
                     }
                     dc.DrawGeometry(null, thin, Poly(false, pts.ToArray()));
                 }
@@ -405,16 +622,32 @@ public class CharacterControl : FrameworkElement
                     if (_sleep > 0.85)
                     {
                         foreach (var s in new[] { -1, 1 })
-                            dc.DrawLine(thin, new Point(50 + s * ex - 5, ey + 1), new Point(50 + s * ex + 5, ey + 1));
+                            dc.DrawLine(thin, new Point(cx + s * ex - f.Er, ey + 1), new Point(cx + s * ex + f.Er, ey + 1));
                         break;
                     }
                     double open = _mood == Mood.Surprised ? 1.5 : 1;
-                    double h = Math.Max(0.6, 5.5 * open * (1 - lid));
+                    double rx = f.Er * (_mood == Mood.Surprised ? 1.3 : 1);
+                    double h = Math.Max(0.5, f.Er * 1.2 * open * (1 - lid));
                     foreach (var s in new[] { -1, 1 })
                     {
-                        var c = new Point(50 + s * ex + lx, ey + ly);
-                        dc.DrawEllipse(ink, null, c, 4.6 * (_mood == Mood.Surprised ? 1.3 : 1), h);
-                        if (lid < 0.5) dc.DrawEllipse(Brushes.White, null, new Point(c.X + 1.3, c.Y - 1.5), 1.4, 1.4);
+                        var c = new Point(cx + s * ex + lx * (f.Er / 4.6 + 0.3), ey + ly * (f.Er / 4.6 + 0.3));
+                        if (f.Glow)
+                        {
+                            // светящиеся глаза слайма
+                            dc.DrawEllipse(Br("#40FFF6B0"), null, c, rx * 1.35, Math.Max(0.6, h * 1.35));
+                            dc.DrawEllipse(Shape_Brush("slime.eye", () =>
+                            {
+                                var rb = new RadialGradientBrush { Center = new Point(0.5, 0.5), RadiusX = 0.55, RadiusY = 0.55 };
+                                rb.GradientStops.Add(new GradientStop(C("#FFFFFFFF"), 0)); rb.GradientStops.Add(new GradientStop(C("#FFFFF3A6"), 0.7)); rb.GradientStops.Add(new GradientStop(C("#FFEFE27A"), 1));
+                                return rb;
+                            }), null, c, rx, h);
+                        }
+                        else
+                        {
+                            dc.DrawEllipse(ink, null, c, rx, h);
+                            if (lid < 0.5 && f.Er >= 3.5) dc.DrawEllipse(Brushes.White, null, new Point(c.X + 1.3, c.Y - 1.5), 1.4, 1.4);
+                            else if (lid < 0.5 && f.Er >= 2.5) dc.DrawEllipse(Brushes.White, null, new Point(c.X + 0.8, c.Y - 0.9), 0.8, 0.8);
+                        }
                     }
                     break;
                 }
@@ -423,33 +656,33 @@ public class CharacterControl : FrameworkElement
         // ── брови ──
         if (_mood == Mood.Angry)
         {
-            dc.DrawLine(thin, new Point(50 - ex - 7, ey - 9), new Point(50 - ex + 6, ey - 5));
-            dc.DrawLine(thin, new Point(50 + ex + 7, ey - 9), new Point(50 + ex - 6, ey - 5));
+            dc.DrawLine(thin, new Point(cx - ex - 7, ey - 9), new Point(cx - ex + 6, ey - 5));
+            dc.DrawLine(thin, new Point(cx + ex + 7, ey - 9), new Point(cx + ex - 6, ey - 5));
         }
         else if (_mood == Mood.Sad)
         {
-            dc.DrawLine(thin, new Point(50 - ex - 7, ey - 5), new Point(50 - ex + 6, ey - 9));
-            dc.DrawLine(thin, new Point(50 + ex + 7, ey - 5), new Point(50 + ex - 6, ey - 9));
+            dc.DrawLine(thin, new Point(cx - ex - 7, ey - 5), new Point(cx - ex + 6, ey - 9));
+            dc.DrawLine(thin, new Point(cx + ex + 7, ey - 5), new Point(cx + ex - 6, ey - 9));
             // слеза стекает плавно
             double tear = (_time * 14) % 14;
-            dc.DrawEllipse(new SolidColorBrush(C("#5AB6FF")), null, new Point(50 + ex + 4, ey + 6 + tear), 2, 3);
+            dc.DrawEllipse(new SolidColorBrush(C("#5AB6FF")), null, new Point(cx + ex + 4, ey + 6 + tear), 2, 3);
         }
 
         // ── рот ──
-        double my = Kind == "Spark" ? 64 : 68;
+        double my = f.My, mw = f.Mw, ms = Math.Max(0.6, mw / 7);
         switch (_mood)
         {
-            case Mood.Surprised: dc.DrawEllipse(ink, null, new Point(50, my + 2), 3.5, 4.5); break;
-            case Mood.Laugh: dc.DrawGeometry(ink, null, Poly(true, (41, my - 2), (59, my - 2), (50, my + 8))); break;
-            case Mood.Sad: dc.DrawGeometry(null, thin, Poly(false, (43, my + 4), (50, my), (57, my + 4))); break;
-            case Mood.Angry: dc.DrawLine(thin, new Point(44, my + 2), new Point(56, my + 2)); break;
+            case Mood.Surprised: dc.DrawEllipse(ink, null, new Point(cx, my + 2), 3.5 * ms, 4.5 * ms); break;
+            case Mood.Laugh: dc.DrawGeometry(ink, null, Poly(true, (cx - 9 * ms, my - 2), (cx + 9 * ms, my - 2), (cx, my + 8 * ms))); break;
+            case Mood.Sad: dc.DrawGeometry(null, thin, Poly(false, (cx - 7 * ms, my + 4), (cx, my), (cx + 7 * ms, my + 4))); break;
+            case Mood.Angry: dc.DrawLine(thin, new Point(cx - 6 * ms, my + 2), new Point(cx + 6 * ms, my + 2)); break;
             default:
-                if (_sleep > 0.6) dc.DrawEllipse(ink, null, new Point(50, my + 1), 2, 2.5);
-                else dc.DrawGeometry(null, thin, Poly(false, (43, my - 1), (46.5, my + 3), (50, my), (53.5, my + 3), (57, my - 1)));
+                if (_sleep > 0.6) dc.DrawEllipse(ink, null, new Point(cx, my + 1), 2 * ms, 2.5 * ms);
+                else if (f.Arc) dc.DrawGeometry(null, thin, Poly(false, (cx - mw, my), (cx - mw * 0.4, my + 2.6), (cx + mw * 0.4, my + 2.6), (cx + mw, my)));
+                else dc.DrawGeometry(null, thin, Poly(false, (cx - mw, my - 1), (cx - mw / 2, my + 3), (cx, my), (cx + mw / 2, my + 3), (cx + mw, my - 1)));
                 break;
         }
     }
-
     void DrawHeart(DrawingContext dc, double cx, double cy, double s)
     {
         s *= 1 + 0.12 * Math.Sin(_time * 14);       // сердцебиение

@@ -14,7 +14,7 @@ public class HomeTab : TabPage
     readonly TextBlock _line1 = UI.Text("", 12.5, true), _line2 = UI.Text("", 11.5, false, true);
     readonly TextBlock _head = UI.Text("", 12, false, true);
     readonly TextBlock _volName = UI.Text("", 10.5, false, true), _volPct = UI.Text("", 11, false, true);
-    readonly Image _cover = new() { Width = 70, Height = 70, Stretch = Stretch.UniformToFill };
+    readonly Image _cover = new() { Width = 60, Height = 60, Stretch = Stretch.UniformToFill };
     readonly SeekBar _seek = new(), _vol = new();
     readonly TextBlock _pos = UI.Text("0:00", 10.5, false, true), _dur = UI.Text("0:00", 10.5, false, true);
     RoundButton _play;
@@ -94,7 +94,7 @@ public class HomeTab : TabPage
 
     void BuildPlayer()
     {
-        var cb = new Border { CornerRadius = new CornerRadius(10), ClipToBounds = true, Child = _cover, Width = 70, Height = 70, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Top };
+        var cb = new Border { CornerRadius = new CornerRadius(10), ClipToBounds = true, Child = _cover, Width = 60, Height = 60, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Top };
         cb.SetResourceReference(Border.BackgroundProperty, "CardHover");
         var meta = new StackPanel { Margin = new Thickness(0, 0, 0, 0) };
         meta.Children.Add(_song); meta.Children.Add(_artist);
