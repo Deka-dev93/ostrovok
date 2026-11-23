@@ -156,17 +156,17 @@ public class SettingsTab : TabPage
             foreach (var a2 in Theme.Accents)
             {
                 var hex = a2;
-                var sw = new Button
-                {
-                    Width = 24, Height = 24, Margin = new Thickness(0, 0, 6, 0), BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
-                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex))
-                };
-                sw.Click += (_, _) => { Hub.S.Accent = hex; Hub.S.Save(); Theme.Apply(); };
+                // круглые образцы цвета, выбранный обведён (как в Atoll)
+                var dotC = new System.Windows.Shapes.Ellipse { Width = 22, Height = 22, Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)), StrokeThickness = 2.5 };
+                if (string.Equals(hex, Hub.S.Accent, StringComparison.OrdinalIgnoreCase)) dotC.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Fg");
+                var sw = new Button { Width = 28, Height = 28, Margin = new Thickness(0, 0, 6, 0), Style = (Style)Application.Current.FindResource("BareBtn"), Content = dotC };
+                sw.Click += (_, _) => { Hub.S.Accent = hex; Hub.S.Save(); Theme.Apply(); Rebuild(); };
                 accents.Children.Add(sw);
             }
             p.Children.Add(accents);
             p.Children.Add(Check("Стеклянный вид (можно вместе с тёмной темой)", () => Hub.S.Glass, v => { Hub.S.Glass = v; Theme.Apply(); }));
             p.Children.Add(Check("Тёмная тема", () => Hub.S.DarkTheme, v => { Hub.S.DarkTheme = v; Theme.Apply(); }));
+            p.Children.Add(Check("Прозрачный низ (когда стекло выключено)", () => Hub.S.BottomFade, v => { Hub.S.BottomFade = v; Theme.Apply(); }));
             p.Children.Add(Check("Открывать по клику (а не по наведению)", () => Hub.S.OpenOnClick, v => Hub.S.OpenOnClick = v));
             p.Children.Add(Check("Режим «У края» — остров растёт из верхнего края", () => Hub.S.EdgeMode, v => { Hub.S.EdgeMode = v; _win.ApplyEdgeMode(); }));
             p.Children.Add(Check("Прятаться в играх и полноэкранном видео", () => Hub.S.HideInFullscreen, v => Hub.S.HideInFullscreen = v));
@@ -259,7 +259,8 @@ public class SettingsTab : TabPage
             p.Children.Add(UI.Text("История хранится только в памяти, до 30 записей. Пароли из менеджеров не сохраняются.", 11, false, true));
         }
 
-        Children.Add(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = p });
+        // всё содержимое раздела — в одной «плитке», как в настройках Atoll
+        Children.Add(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = UI.Tile(p, 20, 16) });
     }
 
     internal static CheckBox Check(string text, Func<bool> get, Action<bool> set)

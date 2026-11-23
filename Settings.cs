@@ -15,6 +15,7 @@ public class AppSettings
     public string Accent { get; set; } = "#7C5CFF";
     public bool DarkTheme { get; set; } = true;
     public bool Glass { get; set; } = false;
+    public bool BottomFade { get; set; } = true;          // «прозрачный низ» у сплошного острова
     public bool ShelfOn { get; set; } = false;
     public int ShelfPort { get; set; } = 0;
     public string ShelfToken { get; set; } = "";

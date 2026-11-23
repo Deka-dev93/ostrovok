@@ -26,12 +26,25 @@
                 <ContentControl x:Name="CompactRight" Grid.Column="2" VerticalAlignment="Center"/>
             </Grid>
             <!-- Развёрнутый вид -->
-            <DockPanel x:Name="Expanded" Width="572" Height="352" Margin="0,10,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0" IsHitTestVisible="False">
-                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                    <ContentControl x:Name="ExpChar" DockPanel.Dock="Right" Width="34" Height="34"/>
-                    <StackPanel x:Name="BarRight" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <StackPanel x:Name="TabBar" Orientation="Horizontal"/>
-                </DockPanel>
+            <DockPanel x:Name="Expanded" Width="572" Height="352" Margin="0,12,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0" IsHitTestVisible="False">
+                <!-- Шапка как в Atoll: точки страниц + название; при наведении точки превращаются в значки вкладок.
+                     Справа — персонаж, часы, кнопки и «свернуть». -->
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,10" Height="34">
+                    <Grid x:Name="TabArea" HorizontalAlignment="Left" VerticalAlignment="Center" Background="Transparent">
+                        <StackPanel x:Name="PageDots" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                            <StackPanel x:Name="DotsRow" Orientation="Horizontal" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="PageTitle" FontSize="13.5" FontWeight="SemiBold" Margin="10,0,0,1" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Fg}"/>
+                        </StackPanel>
+                        <StackPanel x:Name="TabBar" Orientation="Horizontal" VerticalAlignment="Center" Opacity="0" IsHitTestVisible="False"/>
+                    </Grid>
+                    <StackPanel x:Name="HeadRight" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <ContentControl x:Name="ExpChar" Width="32" Height="32" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="ExpTime" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"
+                                   Foreground="{DynamicResource Fg}"/>
+                        <StackPanel x:Name="BarRight" Orientation="Horizontal" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
                 <Grid x:Name="Host"/>
             </DockPanel>
             <!-- Праздник: гирлянда и сугроб поверх содержимого -->

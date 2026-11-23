@@ -37,8 +37,11 @@ public class RoundButton : Button
         }
         else
         {
-            SetResourceReference(BackgroundProperty, "Card");
-            _p.SetResourceReference(Shape.FillProperty, "Fg"); _p.SetResourceReference(Shape.StrokeProperty, "Fg");
+            // второстепенные кнопки — контурные значки без подложки, как в Atoll
+            Background = Brushes.Transparent;
+            _p.Fill = Brushes.Transparent; _p.StrokeThickness = 1.8;
+            _p.SetResourceReference(Shape.StrokeProperty, "Fg");
+            _outline = true;
         }
         Content = new Viewbox { Width = glyph, Height = glyph, Child = _p };
         Glyph = data;
@@ -52,7 +55,8 @@ public class RoundButton : Button
     }
 
     public void SetPlaying(bool playing) => Glyph = playing ? Glyphs.Pause : Glyphs.Play;
-    public void Tint(Brush b) { _p.Fill = b; _p.Stroke = b; }
+    bool _outline;
+    public void Tint(Brush b) { _p.Stroke = b; _p.Fill = _outline && !ReferenceEquals(b, Application.Current.Resources["Fg"]) ? b : (_outline ? Brushes.Transparent : b); }
 }
 
 /// <summary>Полоса перемотки как на YouTube: клик и перетаскивание ставят позицию ровно туда, куда указали.</summary>
@@ -72,9 +76,9 @@ public class SeekBar : Grid
     public SeekBar()
     {
         Height = 22; Background = Brushes.Transparent; Cursor = Cursors.Hand; Margin = new Thickness(0, 4, 0, 0);
-        _track.SetResourceReference(Border.BackgroundProperty, "CardHover");
+        _track.SetResourceReference(Border.BackgroundProperty, "TrackBg");
         _fill.SetResourceReference(Border.BackgroundProperty, "Fg");
-        _thumb.SetResourceReference(Shape.FillProperty, "Fg");
+        _thumb.Fill = Brushes.White;
         Children.Add(_track); Children.Add(_fill); Children.Add(_thumb);
         ToolTip = _tip; ToolTipService.SetInitialShowDelay(this, 0); ToolTipService.SetShowDuration(this, 60000);
         SizeChanged += (_, _) => LayoutBar();
@@ -88,19 +92,34 @@ public class SeekBar : Grid
         set { if (Dragging) return; _value = Math.Clamp(value, 0, 1); LayoutBar(); }
     }
 
+    bool _always;
+    /// <summary>Всегда видимая крупная белая ручка (ползунок громкости как в Atoll).</summary>
+    public bool AlwaysThumb
+    {
+        get => _always;
+        set
+        {
+            _always = value;
+            _thumb.Width = _thumb.Height = value ? 18 : 12;
+            _thumb.Opacity = value ? 1 : 0;
+            _thumb.Effect = value ? new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 5, ShadowDepth = 1, Opacity = 0.3 } : null;
+            LayoutBar();
+        }
+    }
+
     void Hover(bool on)
     {
         var d = TimeSpan.FromMilliseconds(120);
         foreach (var b in new[] { _track, _fill })
             b.BeginAnimation(HeightProperty, new DoubleAnimation(on ? 8 : 4, d) { EasingFunction = new CubicEase() });
-        _thumb.BeginAnimation(OpacityProperty, new DoubleAnimation(on ? 1 : 0, d));
+        if (!_always) _thumb.BeginAnimation(OpacityProperty, new DoubleAnimation(on ? 1 : 0, d));
     }
 
     void LayoutBar()
     {
-        double w = ActualWidth;
+        double w = ActualWidth, t = _thumb.Width;
         _fill.Width = Math.Max(0, w * _value);
-        _thumb.Margin = new Thickness(Math.Clamp(w * _value - 6, 0, Math.Max(0, w - 12)), 0, 0, 0);
+        _thumb.Margin = new Thickness(Math.Clamp(w * _value - t / 2, 0, Math.Max(0, w - t)), 0, 0, 0);
     }
 
     double Frac(MouseEventArgs e) => ActualWidth <= 0 ? 0 : Math.Clamp(e.GetPosition(this).X / ActualWidth, 0, 1);

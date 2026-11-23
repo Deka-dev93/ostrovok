@@ -73,7 +73,7 @@ public class SettingsWindow : Window
             var key = it.title;
             var b = new Button { Content = sp, Style = (Style)Application.Current.FindResource("IconBtn"), Padding = new Thickness(12, 9, 12, 9), Margin = new Thickness(0, 0, 0, 3),
                                  HorizontalContentAlignment = HorizontalAlignment.Left };
-            b.Background = Brushes.Transparent;
+            b.Background = Brushes.Transparent; b.BorderBrush = Brushes.Transparent;
             b.Click += (_, _) => Go(key);
             side.Children.Add(b); _items.Add((key, b));
         }
@@ -112,7 +112,7 @@ public class SettingsWindow : Window
         p.OnShown();
         foreach (var (n, b) in _items)
         {
-            if (n == key) b.SetResourceReference(Control.BackgroundProperty, "Card");
+            if (n == key) b.SetResourceReference(Control.BackgroundProperty, "ChipBg");
             else b.Background = Brushes.Transparent;
         }
     }

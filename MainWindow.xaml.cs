@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -373,7 +373,7 @@ public partial class MainWindow : Window
         if (_tick % 5 == 0)
         {
             if (!_open) RefreshCompact();
-            if (_open) Page(_tabIndex)?.Tick();
+            if (_open) { Page(_tabIndex)?.Tick(); ExpTime.Text = DateTime.Now.ToString("HH:mm"); }
         }
         if (_tick % 10 == 0)
         {
@@ -644,18 +644,80 @@ public partial class MainWindow : Window
     void BuildBarRight()
     {
         BarRight.Children.Clear();
-        Button Mk(string glyph, string tip, Action a)
+        Button Mk(string glyph, string tip, Action a, double size = 14)
         {
-            var b = new Button { Content = new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = 14 }, ToolTip = tip, Background = Brushes.Transparent,
-                                 Style = (Style)Application.Current.FindResource("IconBtn"), Padding = new Thickness(8, 5, 8, 5), Margin = new Thickness(0, 0, 1, 0) };
-            ((TextBlock)b.Content).SetResourceReference(TextBlock.ForegroundProperty, "FgDim");
-            b.Background = Brushes.Transparent;
+            var b = new Button { Content = new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = size }, ToolTip = tip,
+                                 Style = (Style)Application.Current.FindResource("IconBtn"), Width = 32, Height = 32, Padding = new Thickness(0), Margin = new Thickness(1, 0, 1, 0) };
+            ((TextBlock)b.Content).SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+            b.Background = Brushes.Transparent; b.BorderBrush = Brushes.Transparent;
             b.Click += (_, _) => a();
             return b;
         }
-        BarRight.Children.Add(Mk("\uE793", "Светлая / тёмная тема", ToggleTheme));
-        BarRight.Children.Add(Mk("\uE7F4", "Стеклянный вид", ToggleGlass));
+        BarRight.Children.Add(Mk("\uE771", "Стеклянный вид (вкл/выкл)", ToggleGlass));
         BarRight.Children.Add(Mk("\uE713", "Настройки", () => SettingsWindow.ShowIt(this)));
+        BarRight.Children.Add(Mk("\uE70E", "Свернуть", () => SetOpen(false), 12));
+    }
+
+    // ───────── шапка: точки страниц (как в Atoll) ─────────
+    bool _iconsShown, _headHooked;
+    readonly DispatcherTimer _iconsHide = new() { Interval = TimeSpan.FromMilliseconds(160) };
+
+    void BuildDots()
+    {
+        DotsRow.Children.Clear();
+        for (int i = 0; i < _tabs.Count; i++)
+        {
+            int idx = i;
+            var dot = new Border { Height = 6, Width = 6, CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 5, 0), Cursor = Cursors.Hand, ToolTip = _tabs[i].name };
+            dot.PreviewMouseLeftButtonDown += (_, e) => { ShowTab(idx); e.Handled = true; };
+            DotsRow.Children.Add(dot);
+        }
+        if (!_headHooked)
+        {
+            _headHooked = true;
+            TabArea.MouseEnter += (_, _) => { _iconsHide.Stop(); ShowTabIcons(true); };
+            TabArea.MouseLeave += (_, _) => { _iconsHide.Start(); };
+            _iconsHide.Tick += (_, _) => { _iconsHide.Stop(); if (!TabArea.IsMouseOver) ShowTabIcons(false); };
+        }
+    }
+
+    void UpdateDots()
+    {
+        for (int i = 0; i < DotsRow.Children.Count; i++)
+        {
+            var dot = (Border)DotsRow.Children[i];
+            bool on = i == _tabIndex;
+            dot.SetResourceReference(Border.BackgroundProperty, on ? "Fg" : "Fg3");
+            dot.BeginAnimation(WidthProperty, new System.Windows.Media.Animation.DoubleAnimation(on ? 18 : 6, TimeSpan.FromMilliseconds(320))
+            { EasingFunction = new System.Windows.Media.Animation.BackEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut, Amplitude = 0.5 } });
+        }
+        PageTitle.Text = _tabIndex >= 0 && _tabIndex < _tabs.Count ? _tabs[_tabIndex].name : "";
+    }
+
+    /// <summary>Точки «тают» в значки вкладок одна за другой (и обратно): прозрачность и масштаб.</summary>
+    void ShowTabIcons(bool show)
+    {
+        if (_iconsShown == show) return;
+        _iconsShown = show;
+        TabBar.IsHitTestVisible = show;
+        TabBar.Opacity = 1;
+        var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+        for (int i = 0; i < _tabBtns.Count; i++)
+        {
+            var b = _tabBtns[i];
+            if (b.RenderTransform is not ScaleTransform st || st.IsFrozen) { st = new ScaleTransform(1, 1); b.RenderTransform = st; b.RenderTransformOrigin = new Point(0.5, 0.5); }
+            int order = show ? i : _tabBtns.Count - 1 - i;
+            var begin = TimeSpan.FromMilliseconds(order * (show ? 16 : 10));
+            var dur = TimeSpan.FromMilliseconds(show ? 300 : 200);
+            b.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(show ? 1 : 0, dur) { BeginTime = begin });
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, new System.Windows.Media.Animation.DoubleAnimation(show ? 1 : 0.55, dur) { BeginTime = begin, EasingFunction = ease });
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(show ? 1 : 0.55, dur) { BeginTime = begin, EasingFunction = ease });
+        }
+        var fade = TimeSpan.FromMilliseconds(220);
+        PageDots.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(show ? 0 : 1, fade) { BeginTime = TimeSpan.FromMilliseconds(show ? 0 : 120) });
+        // время и персонаж уступают место значкам
+        ExpTime.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(show ? 0 : 1, fade));
+        ExpChar.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(show ? 0 : 1, fade));
     }
 
     void BuildTabs()
@@ -703,11 +765,14 @@ public partial class MainWindow : Window
         for (int i = 0; i < _tabs.Count; i++)
         {
             int idx = i;
-            var b = new Button { ToolTip = _tabs[i].name, Padding = new Thickness(9, 5, 9, 5), FontSize = 14, Background = Brushes.Transparent,
-                                 Style = (Style)Application.Current.FindResource("IconBtn"), Margin = new Thickness(0, 0, 1, 0) };
+            var b = new Button { ToolTip = _tabs[i].name, Padding = new Thickness(8, 6, 8, 6), FontSize = 14,
+                                 Style = (Style)Application.Current.FindResource("IconBtn"), Margin = new Thickness(0, 0, 1, 0), Opacity = 0 };
+            b.Background = Brushes.Transparent; b.BorderBrush = Brushes.Transparent;
             b.Click += (_, _) => ShowTab(idx);
             TabBar.Children.Add(b); _tabBtns.Add(b);
         }
+        _iconsShown = false; TabBar.IsHitTestVisible = false; PageDots.Opacity = 1;
+        BuildDots();
         BuildBarRight();
         int keep = cur == null ? 0 : _tabs.FindIndex(t => t.name == cur);
         _tabIndex = keep < 0 ? 0 : keep;
@@ -736,10 +801,15 @@ public partial class MainWindow : Window
         p.OnShown();
         for (int k = 0; k < _tabBtns.Count; k++)
         {
-            if (k == i) _tabBtns[k].SetResourceReference(Control.BackgroundProperty, "CardHover");
-            else _tabBtns[k].Background = Brushes.Transparent;
+            if (k == i)
+            {
+                _tabBtns[k].SetResourceReference(Control.BackgroundProperty, "ChipBg");
+                _tabBtns[k].SetResourceReference(Control.BorderBrushProperty, "TileStroke");
+            }
+            else { _tabBtns[k].Background = Brushes.Transparent; _tabBtns[k].BorderBrush = Brushes.Transparent; }
         }
         UpdateBadges();
+        UpdateDots();
         // мягкое появление страницы: лёгкий сдвиг снизу + проявление
         var tt = new TranslateTransform(0, 10); Host.RenderTransform = tt;
         var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
